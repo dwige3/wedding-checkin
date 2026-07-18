@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Check-in · Tamara &amp; Nicolas</title>
+<style>
+  :root {
+    --gold: #B08D57;
+    --dark: #2E2A26;
+    --cream: #FDFBF7;
+    --green: #2f7a3d;
+    --red: #b23a3a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    background: var(--cream);
+    color: var(--dark);
+    margin: 0;
+    padding: 16px;
+  }
+  .app { max-width: 480px; margin: 0 auto; }
+  h1 {
+    text-align: center;
+    font-size: 20px;
+    letter-spacing: 2px;
+    color: var(--gold);
+    margin: 4px 0 16px;
+    font-weight: normal;
+  }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tab {
+    flex: 1; padding: 10px; text-align: center;
+    border: 1px solid var(--gold); background: transparent;
+    color: var(--dark); cursor: pointer; font-family: inherit; font-size: 14px;
+  }
+  .tab.active { background: var(--gold); color: white; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  #video-wrap {
+    position: relative; width: 100%; aspect-ratio: 1 / 1;
+    background: #111; border: 2px solid var(--gold);
+    overflow: hidden; border-radius: 6px;
+  }
+  video, canvas.overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;
+  }
+  #startBtn {
+    display: block; width: 100%; padding: 12px; margin-top: 10px;
+    background: var(--gold); color: white; border: none; font-size: 15px;
+    border-radius: 4px; cursor: pointer;
+  }
+  #result { margin-top: 14px; padding: 16px; border-radius: 6px; text-align: center; display: none; }
+  #result.ok { background: #e5f3e7; border: 2px solid var(--green); display: block; }
+  #result.dup { background: #f7e6e6; border: 2px solid var(--red); display: block; }
+  #result .status { font-size: 17px; font-weight: bold; margin-bottom: 6px; }
+  #result.ok .status { color: var(--green); }
+  #result.dup .status { color: var(--red); }
+  #result .name { font-size: 20px; margin: 4px 0; }
+  #result .meta { font-size: 13px; opacity: 0.8; }
+
+  textarea {
+    width: 100%; height: 140px; font-family: monospace; font-size: 13px;
+    padding: 8px; border: 1px solid var(--gold); border-radius: 4px; margin-bottom: 8px;
+  }
+  button.action {
+    padding: 10px 14px; background: var(--gold); color: white; border: none;
+    border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 6px;
+  }
+  .msg { font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
+  .stats {
+    margin-top: 14px; padding: 10px; border: 1px dashed var(--gold);
+    border-radius: 4px; font-size: 14px; text-align: center;
+  }
+  .override {
+    margin-top: 10px; font-size: 12px; text-decoration: underline;
+    color: var(--dark); cursor: pointer; text-align: center;
+  }
+  .hint { font-size: 12px; opacity: 0.7; margin-top: 6px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>CHECK-IN · TAMARA &amp; NICOLAS</h1>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="scan">Scansiona ingresso</button>
+    <button class="tab" data-tab="import">Importa invitati</button>
+  </div>
+
+  <div class="panel active" id="panel-scan">
+    <div id="video-wrap">
+      <video id="video" playsinline muted></video>
+      <canvas class="overlay" id="overlay"></canvas>
+    </div>
+    <button id="startBtn">Avvia fotocamera</button>
+    <div class="hint">Inquadra il QR del biglietto. La scansione parte in automatico.</div>
+
+    <div id="result">
+      <div class="status" id="r-status"></div>
+      <div class="name" id="r-name"></div>
+      <div class="meta" id="r-meta"></div>
+      <div class="override" id="overrideBtn" style="display:none;">Registra comunque l'ingresso</div>
+    </div>
+
+    <div class="stats" id="stats">Caricamento statistiche...</div>
+  </div>
+
+  <div class="panel" id="panel-import">
+    <p style="font-size:13px;">Incolla qui il contenuto del file <b>import_checkin.csv</b> generato dallo script Python (formato: <code>id,nome,tavolo</code>, una riga per invitato).</p>
+    <label for="staffPin" style="font-size:13px; display:block; margin-bottom:4px;">PIN staff (richiesto per importare, azzerare o forzare un ingresso)</label>
+    <input type="password" id="staffPin" placeholder="PIN staff" autocomplete="off"
+           style="width:100%; padding:8px; border:1px solid var(--gold); border-radius:4px; margin-bottom:8px; font-family:inherit;">
+    <textarea id="csvInput" placeholder="0001,Mario Rossi,8
+0002,Anna Bianchi,3"></textarea>
+    <div>
+      <button class="action" id="importBtn">Importa lista</button>
+      <button class="action" id="resetBtn" style="background:var(--red);">Azzera tutti i check-in</button>
+    </div>
+    <div class="msg" id="importMsg"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+<script>
+(function () {
+  // ---------- Tabs ----------
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+      if (tab.dataset.tab === 'scan') refreshStats();
+    });
+  });
+
+  // ---------- PIN staff ----------
+  function staffPinHeader() {
+    return { 'X-Staff-Pin': document.getElementById('staffPin').value.trim() };
+  }
+
+  // ---------- Import ----------
+  document.getElementById('importBtn').addEventListener('click', async () => {
+    const raw = document.getElementById('csvInput').value.trim();
+    const msg = document.getElementById('importMsg');
+    if (!raw) { msg.textContent = 'Incolla prima il CSV.'; return; }
+    try {
+      const resp = await fetch('/api/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain', ...staffPinHeader() },
+        body: raw
+      });
+      if (resp.status === 403) { msg.textContent = 'PIN staff errato o mancante.'; return; }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      msg.textContent = `Importati ${data.imported} invitati.`;
+      refreshStats();
+    } catch (e) {
+      msg.textContent = 'Errore durante l\'importazione: ' + e.message;
+    }
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', async () => {
+    if (!confirm('Sicuro di voler azzerare TUTTI i check-in? Questa azione non si può annullare.')) return;
+    const msg = document.getElementById('importMsg');
+    try {
+      const resp = await fetch('/api/reset', { method: 'POST', headers: staffPinHeader() });
+      if (resp.status === 403) { msg.textContent = 'PIN staff errato o mancante.'; return; }
+      const data = await resp.json();
+      msg.textContent = `Check-in azzerati per ${data.reset} invitati.`;
+      refreshStats();
+    } catch (e) {
+      msg.textContent = 'Errore: ' + e.message;
+    }
+  });
+
+  // ---------- Stats ----------
+  async function refreshStats() {
+    const el = document.getElementById('stats');
+    try {
+      const resp = await fetch('/api/stats');
+      const data = await resp.json();
+      if (!data.total) {
+        el.textContent = 'Nessun invitato importato ancora.';
+        return;
+      }
+      el.textContent = `Ingressi registrati: ${data.checkedIn} / ${data.total}`;
+    } catch (e) {
+      el.textContent = 'Impossibile contattare il server.';
+    }
+  }
+  refreshStats();
+  setInterval(refreshStats, 5000);
+
+  // ---------- Scanner ----------
+  const video = document.getElementById('video');
+  const overlay = document.getElementById('overlay');
+  const octx = overlay.getContext('2d');
+  const startBtn = document.getElementById('startBtn');
+  const resultBox = document.getElementById('result');
+  const rStatus = document.getElementById('r-status');
+  const rName = document.getElementById('r-name');
+  const rMeta = document.getElementById('r-meta');
+  const overrideBtn = document.getElementById('overrideBtn');
+
+  let scanning = false;
+  let lastScannedId = null;
+  let lastScanTime = 0;
+
+  startBtn.addEventListener('click', async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      video.srcObject = stream;
+      await video.play();
+      overlay.width = video.videoWidth || 400;
+      overlay.height = video.videoHeight || 400;
+      scanning = true;
+      startBtn.style.display = 'none';
+      requestAnimationFrame(tick);
+    } catch (e) {
+      alert('Impossibile accedere alla fotocamera: ' + e.message);
+    }
+  });
+
+  function tick() {
+    if (!scanning) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      overlay.width = video.videoWidth;
+      overlay.height = video.videoHeight;
+      octx.drawImage(video, 0, 0, overlay.width, overlay.height);
+      const imageData = octx.getImageData(0, 0, overlay.width, overlay.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
+      if (code && code.data) {
+        const now = Date.now();
+        if (code.data !== lastScannedId || now - lastScanTime > 4000) {
+          lastScannedId = code.data;
+          lastScanTime = now;
+          handleScan(code.data.trim());
+        }
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  async function handleScan(id) {
+    overrideBtn.style.display = 'none';
+    let data;
+    try {
+      const resp = await fetch('/api/scan/' + encodeURIComponent(id), { method: 'POST' });
+      data = await resp.json();
+    } catch (e) {
+      resultBox.className = 'dup';
+      rStatus.textContent = '❌ ERRORE DI CONNESSIONE';
+      rName.textContent = '';
+      rMeta.textContent = 'Impossibile contattare il server: ' + e.message;
+      return;
+    }
+
+    if (data.status === 'unknown') {
+      resultBox.className = 'dup';
+      rStatus.textContent = '❌ CODICE NON RICONOSCIUTO';
+      rName.textContent = id;
+      rMeta.textContent = 'Questo codice non è nella lista invitati.';
+      return;
+    }
+
+    if (data.status === 'ok') {
+      resultBox.className = 'ok';
+      rStatus.textContent = '✅ INGRESSO OK';
+      rName.textContent = data.nome;
+      rMeta.textContent = 'Tavolo ' + data.tavolo;
+      refreshStats();
+    } else if (data.status === 'duplicate') {
+      resultBox.className = 'dup';
+      rStatus.textContent = '⚠️ GIÀ REGISTRATO';
+      rName.textContent = data.nome;
+      rMeta.textContent = `Ingresso già effettuato alle ${data.orario} · Tavolo ${data.tavolo}`;
+      overrideBtn.style.display = 'block';
+      overrideBtn.onclick = async () => {
+        if (confirm(`Confermi di voler far entrare di nuovo ${data.nome}?`)) {
+          const r = await fetch('/api/override/' + encodeURIComponent(id), {
+            method: 'POST',
+            headers: staffPinHeader()
+          });
+          if (r.status === 403) {
+            rMeta.textContent = 'PIN staff errato o mancante: inseriscilo nella tab "Importa invitati".';
+            return;
+          }
+          rMeta.textContent = 'Ingresso forzato manualmente dallo staff.';
+          overrideBtn.style.display = 'none';
+          refreshStats();
+        }
+      };
+    }
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# Build Maven
+target/
+
+# Database H2 dell'evento (dati reali degli invitati/check-in, non va versionato)
+data/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Log
+*.log
+
+# Ambienti Python (se usi un venv per generate_invite.py)
+__pycache__/
+*.pyc
+.venv/
+venv/
