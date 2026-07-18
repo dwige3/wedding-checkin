@@ -15,6 +15,8 @@ public class Guest {
 
     private String tavolo;
 
+    private String nomeTavolo;
+
     private boolean checkedIn = false;
 
     private Instant checkedInAt;
@@ -23,9 +25,14 @@ public class Guest {
     }
 
     public Guest(String id, String nome, String tavolo) {
+        this(id, nome, tavolo, null);
+    }
+
+    public Guest(String id, String nome, String tavolo, String nomeTavolo) {
         this.id = id;
         this.nome = nome;
         this.tavolo = tavolo;
+        this.nomeTavolo = nomeTavolo;
         this.checkedIn = false;
         this.checkedInAt = null;
     }
@@ -52,6 +59,14 @@ public class Guest {
 
     public void setTavolo(String tavolo) {
         this.tavolo = tavolo;
+    }
+
+    public String getNomeTavolo() {
+        return nomeTavolo;
+    }
+
+    public void setNomeTavolo(String nomeTavolo) {
+        this.nomeTavolo = nomeTavolo;
     }
 
     public boolean isCheckedIn() {

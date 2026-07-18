@@ -146,4 +146,34 @@ class GuestControllerTest {
         mockMvc.perform(post("/api/scan/0001"))
                 .andExpect(jsonPath("$.status").value("duplicate"));
     }
+
+    @Test
+    void importConNomeTavoloLoRestituisceNelloScan() throws Exception {
+        mockMvc.perform(post("/api/import")
+                        .header("X-Staff-Pin", PIN_CORRETTO)
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("id,nome,tavolo,nomeTavolo\n0003,Luca Verdi,5,Pazienza"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imported").value(1));
+
+        mockMvc.perform(post("/api/scan/0003"))
+                .andExpect(jsonPath("$.status").value("ok"))
+                .andExpect(jsonPath("$.tavolo").value("5"))
+                .andExpect(jsonPath("$.nomeTavolo").value("Pazienza"));
+    }
+
+    @Test
+    void importSenzaNomeTavoloRestaCompatibile() throws Exception {
+        // formato CSV a 3 colonne (senza nomeTavolo), ancora supportato
+        mockMvc.perform(post("/api/import")
+                        .header("X-Staff-Pin", PIN_CORRETTO)
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("id,nome,tavolo\n0004,Sara Neri,6"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imported").value(1));
+
+        mockMvc.perform(post("/api/scan/0004"))
+                .andExpect(jsonPath("$.status").value("ok"))
+                .andExpect(jsonPath("$.tavolo").value("6"));
+    }
 }

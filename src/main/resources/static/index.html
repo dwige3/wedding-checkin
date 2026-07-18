@@ -109,12 +109,12 @@
   </div>
 
   <div class="panel" id="panel-import">
-    <p style="font-size:13px;">Incolla qui il contenuto del file <b>import_checkin.csv</b> generato dallo script Python (formato: <code>id,nome,tavolo</code>, una riga per invitato).</p>
+    <p style="font-size:13px;">Incolla qui il contenuto del file <b>import_checkin.csv</b> generato dallo script Python (formato: <code>id,nome,tavolo,nomeTavolo</code>, una riga per invitato; il nome tavolo e' opzionale).</p>
     <label for="staffPin" style="font-size:13px; display:block; margin-bottom:4px;">PIN staff (richiesto per importare, azzerare o forzare un ingresso)</label>
     <input type="password" id="staffPin" placeholder="PIN staff" autocomplete="off"
            style="width:100%; padding:8px; border:1px solid var(--gold); border-radius:4px; margin-bottom:8px; font-family:inherit;">
-    <textarea id="csvInput" placeholder="0001,Mario Rossi,8
-0002,Anna Bianchi,3"></textarea>
+    <textarea id="csvInput" placeholder="0001,Mario Rossi,8,Pazienza
+0002,Anna Bianchi,3,Amore"></textarea>
     <div>
       <button class="action" id="importBtn">Importa lista</button>
       <button class="action" id="resetBtn" style="background:var(--red);">Azzera tutti i check-in</button>
@@ -267,17 +267,19 @@
       return;
     }
 
+    const tavoloLabel = (d) => d.nomeTavolo ? `Tavolo ${d.tavolo} · ${d.nomeTavolo}` : `Tavolo ${d.tavolo}`;
+
     if (data.status === 'ok') {
       resultBox.className = 'ok';
       rStatus.textContent = '✅ INGRESSO OK';
       rName.textContent = data.nome;
-      rMeta.textContent = 'Tavolo ' + data.tavolo;
+      rMeta.textContent = tavoloLabel(data);
       refreshStats();
     } else if (data.status === 'duplicate') {
       resultBox.className = 'dup';
       rStatus.textContent = '⚠️ GIÀ REGISTRATO';
       rName.textContent = data.nome;
-      rMeta.textContent = `Ingresso già effettuato alle ${data.orario} · Tavolo ${data.tavolo}`;
+      rMeta.textContent = `Ingresso già effettuato alle ${data.orario} · ${tavoloLabel(data)}`;
       overrideBtn.style.display = 'block';
       overrideBtn.onclick = async () => {
         if (confirm(`Confermi di voler far entrare di nuovo ${data.nome}?`)) {

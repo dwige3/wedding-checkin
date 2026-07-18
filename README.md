@@ -31,9 +31,19 @@ L'app parte sulla porta **8080** ed e' raggiungibile da qualsiasi dispositivo su
 
 1. **Importa invitati**: incolla il contenuto di `import_checkin.csv` (generato dallo script Python `generate_invite.py`) nella tab "Importa invitati" e premi "Importa lista".
 2. **Scansiona ingresso**: nella tab "Scansiona ingresso", premi "Avvia fotocamera" e inquadra i QR dei biglietti.
-   - ✅ Prima scansione → ingresso registrato, mostra nome e tavolo.
+   - ✅ Prima scansione → ingresso registrato, mostra nome, tavolo (e nome tavolo se presente).
    - ⚠️ Scansione ripetuta → avviso di doppio ingresso con orario del primo accesso. Lo staff puo' comunque forzare un nuovo ingresso in caso di errore.
 3. Il contatore "Ingressi registrati: X / Y" si aggiorna automaticamente ogni 5 secondi.
+
+## Formato del CSV di import
+
+```
+id,nome,tavolo,nomeTavolo
+0001,Mario Rossi,8,Pazienza
+0002,Anna Bianchi,3,Amore
+```
+
+Il quarto campo (`nomeTavolo`) e' opzionale: un CSV a 3 colonne (`id,nome,tavolo`, senza nome tavolo) resta valido e viene importato normalmente. Il CSV generato da `generate_invite.py` include sempre tutte e 4 le colonne.
 
 ## Dati e persistenza
 
@@ -52,6 +62,18 @@ mvn test
 ```
 
 I test in `src/test/java/com/wedding/checkin/GuestControllerTest.java` coprono: prima scansione, scansione duplicata, override e reset con/senza PIN corretto, import con/senza PIN. Usano un database H2 in memoria (`src/test/resources/application.properties`), quindi non toccano mai i dati reali in `./data/`.
+
+## Biglietti PDF (generate_invite.py)
+
+Gli inviti sono generati in formato "ticket" orizzontale (200x100mm): pannello invito a sinistra, tagliando con QR a destra, separati da una linea di strappo perforata — tema verde scuro/oro con ornamenti grafici vettoriali (nessuna immagine esterna richiesta, quindi nessun font o asset da scaricare).
+
+Dipendenze Python richieste:
+
+```bash
+pip install qrcode reportlab pandas openpyxl
+```
+
+Prima di lanciare lo script, apri `generate_invite.py` e imposta `OUTPUT_DIR` con il percorso reale sul tuo PC dove vuoi salvare PDF e CSV (la cartella viene creata automaticamente se non esiste).
 
 ## Note
 

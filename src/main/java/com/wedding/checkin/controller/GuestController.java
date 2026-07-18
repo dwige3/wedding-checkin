@@ -50,7 +50,9 @@ public class GuestController {
     }
 
     /**
-     * Importa/aggiorna la lista invitati da un CSV testuale (id,nome,tavolo per riga).
+     * Importa/aggiorna la lista invitati da un CSV testuale
+     * (id,nome,tavolo,nomeTavolo per riga; il quarto campo e' opzionale
+     * per compatibilita' con liste generate senza nome tavolo).
      * Non tocca lo stato di check-in di invitati gia' presenti.
      */
     @PostMapping(value = "/import", consumes = MediaType.TEXT_PLAIN_VALUE)
@@ -62,16 +64,18 @@ public class GuestController {
             for (String rawLine : csv.split("\\r?\\n")) {
                 String line = rawLine.trim();
                 if (line.isEmpty()) continue;
-                String[] parts = line.split(",", 3);
+                String[] parts = line.split(",", 4);
                 if (parts.length < 3) continue;
                 String id = parts[0].trim();
                 if (id.equalsIgnoreCase("id")) continue; // salta l'header
                 String nome = parts[1].trim();
                 String tavolo = parts[2].trim();
+                String nomeTavolo = parts.length >= 4 ? parts[3].trim() : "";
 
-                Guest guest = repo.findById(id).orElseGet(() -> new Guest(id, nome, tavolo));
+                Guest guest = repo.findById(id).orElseGet(() -> new Guest(id, nome, tavolo, nomeTavolo));
                 guest.setNome(nome);
                 guest.setTavolo(tavolo);
+                guest.setNomeTavolo(nomeTavolo);
                 repo.save(guest);
                 imported++;
             }
@@ -105,6 +109,7 @@ public class GuestController {
             }
             result.put("nome", guest.getNome());
             result.put("tavolo", guest.getTavolo());
+            result.put("nomeTavolo", guest.getNomeTavolo());
             return result;
         }
     }
@@ -131,6 +136,7 @@ public class GuestController {
             result.put("status", "ok");
             result.put("nome", guest.getNome());
             result.put("tavolo", guest.getTavolo());
+            result.put("nomeTavolo", guest.getNomeTavolo());
             return result;
         }
     }
