@@ -1,4 +1,4 @@
-package com.wedding.checkin;
+package com.wedding.checkin.model;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;

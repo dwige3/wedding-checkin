@@ -1,5 +1,7 @@
-package com.wedding.checkin;
+package com.wedding.checkin.controller;
 
+import com.wedding.checkin.model.Guest;
+import com.wedding.checkin.repository.GuestRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;

@@ -1,5 +1,7 @@
 package com.wedding.checkin;
 
+import com.wedding.checkin.model.Guest;
+import com.wedding.checkin.repository.GuestRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
