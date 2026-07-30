@@ -117,13 +117,14 @@
 0002,Anna Bianchi,3,Amore"></textarea>
     <div>
       <button class="action" id="importBtn">Importa lista</button>
+      <button class="action" id="downloadInvitesBtn">Scarica inviti (.zip)</button>
       <button class="action" id="resetBtn" style="background:var(--red);">Azzera tutti i check-in</button>
     </div>
     <div class="msg" id="importMsg"></div>
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+<script src="/jsQR.js"></script>
 <script>
 (function () {
   // ---------- Tabs ----------
@@ -156,7 +157,7 @@
       if (resp.status === 403) { msg.textContent = 'PIN staff errato o mancante.'; return; }
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const data = await resp.json();
-      msg.textContent = `Importati ${data.imported} invitati.`;
+      msg.textContent = `Lista aggiornata: ${data.imported} invitati, ${data.removed ?? 0} precedenti rimossi.`;
       refreshStats();
     } catch (e) {
       msg.textContent = 'Errore durante l\'importazione: ' + e.message;
@@ -169,11 +170,39 @@
     try {
       const resp = await fetch('/api/reset', { method: 'POST', headers: staffPinHeader() });
       if (resp.status === 403) { msg.textContent = 'PIN staff errato o mancante.'; return; }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const data = await resp.json();
       msg.textContent = `Check-in azzerati per ${data.reset} invitati.`;
       refreshStats();
     } catch (e) {
       msg.textContent = 'Errore: ' + e.message;
+    }
+  });
+
+  document.getElementById('downloadInvitesBtn').addEventListener('click', async () => {
+    const msg = document.getElementById('importMsg');
+    const button = document.getElementById('downloadInvitesBtn');
+    button.disabled = true;
+    button.textContent = 'Generazione...';
+    msg.textContent = 'Generazione degli inviti in corso. Per liste grandi può richiedere qualche secondo...';
+    try {
+      const resp = await fetch('/api/invites/all.zip', { headers: staffPinHeader() });
+      if (resp.status === 403) { msg.textContent = 'PIN staff errato o mancante.'; return; }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const url = URL.createObjectURL(await resp.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'inviti.zip';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      msg.textContent = 'Archivio degli inviti generato.';
+    } catch (e) {
+      msg.textContent = 'Errore durante la generazione: ' + e.message;
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Scarica inviti (.zip)';
     }
   });
 
@@ -212,6 +241,12 @@
 
   startBtn.addEventListener('click', async () => {
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('fotocamera non supportata dal browser o connessione HTTPS non attiva');
+      }
+      if (typeof jsQR !== 'function') {
+        throw new Error('lettore QR non disponibile');
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       video.srcObject = stream;
       await video.play();
@@ -249,7 +284,12 @@
     overrideBtn.style.display = 'none';
     let data;
     try {
-      const resp = await fetch('/api/scan/' + encodeURIComponent(id), { method: 'POST' });
+      const resp = await fetch('/api/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: id
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
       data = await resp.json();
     } catch (e) {
       resultBox.className = 'dup';
@@ -289,6 +329,10 @@
           });
           if (r.status === 403) {
             rMeta.textContent = 'PIN staff errato o mancante: inseriscilo nella tab "Importa invitati".';
+            return;
+          }
+          if (!r.ok) {
+            rMeta.textContent = 'Errore durante la registrazione forzata (HTTP ' + r.status + ').';
             return;
           }
           rMeta.textContent = 'Ingresso forzato manualmente dallo staff.';

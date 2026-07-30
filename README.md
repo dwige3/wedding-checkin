@@ -16,16 +16,17 @@ cd wedding-checkin
 mvn spring-boot:run
 ```
 
-L'app parte sulla porta **8080** ed e' raggiungibile da qualsiasi dispositivo sulla stessa rete WiFi.
+L'app parte sulla porta **8443** in **HTTPS** (certificato self-signed incluso) ed e' raggiungibile da qualsiasi dispositivo sulla stessa rete WiFi. L'HTTPS e' necessario: i browser dei telefoni bloccano l'accesso alla fotocamera su indirizzi non sicuri (`http://`), quindi lo scanner QR non funzionerebbe con un URL `http://`.
 
 1. Trova l'indirizzo IP locale del laptop (es. `192.168.1.15`):
    - macOS/Linux: `ifconfig | grep inet`
    - Windows: `ipconfig`
 2. Da ogni telefono/tablet, apri il browser su:
    ```
-   http://192.168.1.15:8080
+   https://192.168.1.15:8443
    ```
    (sostituendo con l'IP reale del laptop)
+3. Il browser mostra un avviso perche' il certificato e' self-signed (non emesso da un'autorita' riconosciuta) — e' normale e atteso. Su Chrome/Safari: tocca "Avanzate" (o "Dettagli") poi "Procedi comunque"/"Visita questo sito web". Va fatto una sola volta per dispositivo.
 
 ## Utilizzo
 
@@ -61,6 +62,20 @@ Il PIN di default è `2026`, impostato in `src/main/resources/application.proper
 mvn test
 ```
 
+## Generazione inviti in Java
+
+La generazione degli inviti è integrata nell'app Spring Boot tramite PDFBox e
+ZXing: Python non è necessario. Dopo aver importato la lista invitati, inserisci
+il PIN staff nella tab **Importa invitati** e premi **Scarica inviti (.zip)**.
+
+Sono disponibili anche gli endpoint:
+
+- `GET /api/invites/{id}.pdf` per scaricare un singolo invito;
+- `GET /api/invites/all.zip` per scaricare tutti gli inviti.
+
+Entrambi richiedono il PIN nell'header `X-Staff-Pin`. Il QR contiene soltanto
+l'ID univoco dell'invitato.
+
 I test in `src/test/java/com/wedding/checkin/GuestControllerTest.java` coprono: prima scansione, scansione duplicata, override e reset con/senza PIN corretto, import con/senza PIN. Usano un database H2 in memoria (`src/test/resources/application.properties`), quindi non toccano mai i dati reali in `./data/`.
 
 ## Biglietti PDF (generate_invite.py)
@@ -75,7 +90,39 @@ pip install qrcode reportlab pandas openpyxl
 
 Prima di lanciare lo script, apri `generate_invite.py` e imposta `OUTPUT_DIR` con il percorso reale sul tuo PC dove vuoi salvare PDF e CSV (la cartella viene creata automaticamente se non esiste).
 
+## Prova end-to-end: genera un biglietto e scannerizzalo da telefono
+
+1. **Genera un biglietto di prova.** Dal laptop:
+   ```bash
+   pip install qrcode reportlab pandas openpyxl
+   python generate_invite.py
+   ```
+   Con lo script cosi' com'e' viene creato `invito_0001_mario_rossi.pdf` nella cartella impostata in `OUTPUT_DIR` (di default `C:/Document/sposa`), per l'invitato di prova `0001,Mario Rossi,8,Pazienza`.
+
+2. **Avvia l'app** dal laptop:
+   ```bash
+   mvn spring-boot:run
+   ```
+
+3. **Importa l'invitato di prova.** Dal laptop (o da un telefono), apri `https://<ip-laptop>:8443`, accetta l'avviso del certificato, vai su "Importa invitati", inserisci il PIN staff (default `2026`, in `application.properties`) e incolla:
+   ```
+   id,nome,tavolo,nomeTavolo
+   0001,Mario Rossi,8,Pazienza
+   ```
+   poi premi "Importa lista" — dovrebbe confermare "Importati 1 invitati."
+
+4. **Mostra il QR al telefono.** Apri il PDF del biglietto su uno schermo (laptop, tablet) oppure stampalo. Il QR contiene solo il testo `0001`.
+
+5. **Scansiona.** Sul telefono (connesso alla stessa WiFi), vai sulla tab "Scansiona ingresso", premi "Avvia fotocamera", concedi il permesso quando richiesto, e inquadra il QR. Dovresti vedere "✅ INGRESSO OK" con nome "Mario Rossi" e "Tavolo 8 · Pazienza".
+
+6. **Verifica il doppio ingresso.** Inquadra di nuovo lo stesso QR: dovrebbe apparire "⚠️ GIÀ REGISTRATO" con l'orario del primo ingresso e l'opzione "Registra comunque l'ingresso" (richiede di nuovo il PIN).
+
+7. **Prima dell'evento vero**, usa "Azzera tutti i check-in" (richiede PIN) per ripulire i dati di prova.
+
+Se "Avvia fotocamera" da telefono non chiede il permesso o fallisce subito, la causa piu' probabile e' che l'URL non sia `https://` (vedi sezione HTTPS sopra) oppure che l'avviso del certificato non sia stato accettato.
+
 ## Note
 
 - Il QR sui biglietti deve contenere **solo il codice univoco dell'invitato** (es. `0001`), generato dallo script Python — non il nome in chiaro.
 - In caso di dubbi sulla build (es. mancanza di accesso a Maven Central dalla tua rete), verifica la connessione internet: Maven deve poter scaricare le dipendenze Spring Boot al primo avvio.
+- Il certificato HTTPS incluso (`src/main/resources/keystore.p12`) e' self-signed e va bene per l'uso privato dell'evento: non e' pensato per essere esposto su internet.

@@ -49,6 +49,34 @@ class GuestControllerTest {
     }
 
     @Test
+    void qrEstraneoConUrlRestituisceUnknownSenzaErroreTecnico() throws Exception {
+        mockMvc.perform(post("/api/scan")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("https://example.org/pagina?foo=bar&x=1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("unknown"));
+    }
+
+    @Test
+    void qrEstraneoConTestoECaratteriSpecialiRestituisceUnknown() throws Exception {
+        mockMvc.perform(post("/api/scan")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("QR di un altro evento / tavolo #42"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("unknown"));
+    }
+
+    @Test
+    void nuovaRottaScanRegistraUnQrValido() throws Exception {
+        mockMvc.perform(post("/api/scan")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("0001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ok"))
+                .andExpect(jsonPath("$.nome").value("Mario Rossi"));
+    }
+
+    @Test
     void primaScansioneRegistraLIngresso() throws Exception {
         mockMvc.perform(post("/api/scan/0001"))
                 .andExpect(status().isOk())
@@ -148,6 +176,36 @@ class GuestControllerTest {
     }
 
     @Test
+    void importSincronizzaLaListaEdEliminaGliInvitatiAssenti() throws Exception {
+        repo.save(new Guest("0099", "Invitato precedente", "15"));
+
+        mockMvc.perform(post("/api/import")
+                        .header("X-Staff-Pin", PIN_CORRETTO)
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("id,nome,tavolo\n0001,Mario Rossi,8\n0002,Anna Bianchi,3"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imported").value(2))
+                .andExpect(jsonPath("$.removed").value(1));
+
+        mockMvc.perform(post("/api/scan/0099"))
+                .andExpect(jsonPath("$.status").value("unknown"));
+        mockMvc.perform(post("/api/scan/0002"))
+                .andExpect(jsonPath("$.status").value("ok"));
+    }
+
+    @Test
+    void importNonValidoNonCancellaLaListaEsistente() throws Exception {
+        mockMvc.perform(post("/api/import")
+                        .header("X-Staff-Pin", PIN_CORRETTO)
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("id,nome,tavolo"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/scan/0001"))
+                .andExpect(jsonPath("$.status").value("ok"));
+    }
+
+    @Test
     void importConNomeTavoloLoRestituisceNelloScan() throws Exception {
         mockMvc.perform(post("/api/import")
                         .header("X-Staff-Pin", PIN_CORRETTO)
@@ -176,4 +234,20 @@ class GuestControllerTest {
                 .andExpect(jsonPath("$.status").value("ok"))
                 .andExpect(jsonPath("$.tavolo").value("6"));
     }
+
+    @Test
+    void importCsvSupportaVirgoleEVirgoletteNeiCampi() throws Exception {
+        mockMvc.perform(post("/api/import")
+                        .header("X-Staff-Pin", PIN_CORRETTO)
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("id,nome,tavolo,nomeTavolo\n0005,\"Rossi, Mario\",7,\"L'Amore \"\"vero\"\"\""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imported").value(1));
+
+        mockMvc.perform(post("/api/scan/0005"))
+                .andExpect(jsonPath("$.status").value("ok"))
+                .andExpect(jsonPath("$.nome").value("Rossi, Mario"))
+                .andExpect(jsonPath("$.nomeTavolo").value("L'Amore \"vero\""));
+    }
+
 }

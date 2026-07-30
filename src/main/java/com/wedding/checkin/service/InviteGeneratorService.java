@@ -2,6 +2,8 @@ package com.wedding.checkin.service;
 
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.EncodeHintType;
+import com.google.zxing.client.j2se.MatrixToImageConfig;
+import com.google.zxing.client.j2se.MatrixToImageWriter;
 import com.google.zxing.qrcode.QRCodeWriter;
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 import com.wedding.checkin.model.Guest;
@@ -194,13 +196,8 @@ public class InviteGeneratorService {
             var matrix = new QRCodeWriter().encode(payload, BarcodeFormat.QR_CODE, 500, 500,
                     Map.of(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.M,
                             EncodeHintType.MARGIN, 1));
-            BufferedImage image = new BufferedImage(500, 500, BufferedImage.TYPE_INT_RGB);
-            for (int y = 0; y < 500; y++) {
-                for (int x = 0; x < 500; x++) {
-                    image.setRGB(x, y, matrix.get(x, y) ? GREEN_DARK.getRGB() : Color.WHITE.getRGB());
-                }
-            }
-            return image;
+            return MatrixToImageWriter.toBufferedImage(matrix,
+                    new MatrixToImageConfig(GREEN_DARK.getRGB(), Color.WHITE.getRGB()));
         } catch (Exception e) {
             throw new IllegalArgumentException("Impossibile creare il QR per l'id " + payload, e);
         }

@@ -15,6 +15,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * API per l'app di check-in ingressi.
@@ -59,44 +62,107 @@ public class GuestController {
     public Map<String, Object> importCsv(@RequestBody String csv,
                                           @RequestHeader(value = "X-Staff-Pin", required = false) String pin) {
         checkStaffPin(pin);
-        int imported = 0;
-        if (csv != null) {
-            for (String rawLine : csv.split("\\r?\\n")) {
-                String line = rawLine.trim();
-                if (line.isEmpty()) continue;
-                String[] parts = line.split(",", 4);
-                if (parts.length < 3) continue;
-                String id = parts[0].trim();
-                if (id.equalsIgnoreCase("id")) continue; // salta l'header
-                String nome = parts[1].trim();
-                String tavolo = parts[2].trim();
-                String nomeTavolo = parts.length >= 4 ? parts[3].trim() : "";
+        synchronized (lock) {
+            int imported = 0;
+            Set<String> importedIds = new HashSet<>();
+            if (csv != null) {
+                for (String rawLine : csv.split("\\r?\\n")) {
+                    String line = rawLine.trim();
+                    if (line.isEmpty()) continue;
+                    List<String> parts = parseCsvLine(line);
+                    if (parts.size() < 3) continue;
+                    String id = parts.get(0).trim();
+                    if (id.equalsIgnoreCase("id")) continue; // salta l'header
+                    String nome = parts.get(1).trim();
+                    String tavolo = parts.get(2).trim();
+                    String nomeTavolo = parts.size() >= 4 ? parts.get(3).trim() : "";
+                    if (id.isEmpty() || nome.isEmpty()) continue;
 
-                Guest guest = repo.findById(id).orElseGet(() -> new Guest(id, nome, tavolo, nomeTavolo));
-                guest.setNome(nome);
-                guest.setTavolo(tavolo);
-                guest.setNomeTavolo(nomeTavolo);
-                repo.save(guest);
-                imported++;
+                    Guest guest = repo.findById(id)
+                            .orElseGet(() -> new Guest(id, nome, tavolo, nomeTavolo));
+                    guest.setNome(nome);
+                    guest.setTavolo(tavolo);
+                    guest.setNomeTavolo(nomeTavolo);
+                    repo.save(guest);
+                    importedIds.add(id);
+                    imported++;
+                }
+            }
+
+            if (importedIds.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Il CSV non contiene invitati validi");
+            }
+
+            List<Guest> obsolete = repo.findAll().stream()
+                    .filter(guest -> !importedIds.contains(guest.getId()))
+                    .toList();
+            repo.deleteAll(obsolete);
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("imported", imported);
+            result.put("removed", obsolete.size());
+            return result;
+        }
+    }
+
+    /**
+     * Parser CSV minimale compatibile con i file prodotti da Excel: supporta
+     * campi tra virgolette, virgole nei campi e doppi apici escapati ("").
+     */
+    private List<String> parseCsvLine(String line) {
+        List<String> fields = new ArrayList<>();
+        StringBuilder field = new StringBuilder();
+        boolean quoted = false;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (c == '"') {
+                if (quoted && i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                    field.append('"');
+                    i++;
+                } else {
+                    quoted = !quoted;
+                }
+            } else if (c == ',' && !quoted) {
+                fields.add(field.toString());
+                field.setLength(0);
+            } else {
+                field.append(c);
             }
         }
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("imported", imported);
-        return result;
+        fields.add(field.toString());
+        return fields;
     }
 
     /**
      * Scansione di un QR all'ingresso. Segna il check-in solo se non era gia' stato fatto.
      */
+    @PostMapping(value = "/scan", consumes = MediaType.TEXT_PLAIN_VALUE)
+    public Map<String, Object> scanBody(@RequestBody String rawId) {
+        String id = rawId == null ? "" : rawId.trim();
+        if (id.isEmpty() || id.length() > 256) {
+            return unknownResult();
+        }
+        return scanGuest(id);
+    }
+
+    /**
+     * Rotta mantenuta per compatibilità con eventuali client precedenti.
+     * Il frontend usa /api/scan con il codice nel corpo, così QR estranei
+     * contenenti URL, slash o altri caratteri speciali non rompono la richiesta.
+     */
     @PostMapping("/scan/{id}")
     public Map<String, Object> scan(@PathVariable String id) {
+        return scanGuest(id);
+    }
+
+    private Map<String, Object> scanGuest(String id) {
         synchronized (lock) {
             Optional<Guest> found = repo.findById(id);
-            Map<String, Object> result = new LinkedHashMap<>();
             if (found.isEmpty()) {
-                result.put("status", "unknown");
-                return result;
+                return unknownResult();
             }
+            Map<String, Object> result = new LinkedHashMap<>();
             Guest guest = found.get();
             if (!guest.isCheckedIn()) {
                 guest.setCheckedIn(true);
@@ -112,6 +178,12 @@ public class GuestController {
             result.put("nomeTavolo", guest.getNomeTavolo());
             return result;
         }
+    }
+
+    private Map<String, Object> unknownResult() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", "unknown");
+        return result;
     }
 
     /**
