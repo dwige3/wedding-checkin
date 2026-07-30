@@ -20,7 +20,9 @@ import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Map;
+import javax.imageio.ImageIO;
 
 @Service
 public class InviteGeneratorService {
@@ -67,7 +69,7 @@ public class InviteGeneratorService {
             document.addPage(page);
             try (PDPageContentStream c = new PDPageContentStream(document, page)) {
                 drawBackground(c);
-                drawFloralBorder(c);
+                drawFloralBorder(document, c);
                 drawDivider(c);
                 drawInvitationPanel(c);
                 drawGuestPanel(document, c, guest);
@@ -103,27 +105,51 @@ public class InviteGeneratorService {
     }
 
     private void drawInvitationPanel(PDPageContentStream c) throws IOException {
-        float left = MARGIN + 24 * MM;
+        float left = MARGIN + 38 * MM;
         float right = DIVIDER_X - 6 * MM;
         float cx = (left + right) / 2;
         float width = right - left;
 
-        heart(c, cx, PAGE_H - 12 * MM, 4 * MM, CREAM);
-        flourish(c, cx, PAGE_H - 15.5f * MM, 25 * MM);
-        centered(c, "Con grande gioia vi invitiamo alle nozze di",
-                PDType1Font.TIMES_ITALIC, 8, cx, PAGE_H - 22 * MM, GOLD);
-        centeredFit(c, "Tamara & Nicolas", PDType1Font.TIMES_ITALIC,
-                26, 16, width, cx, PAGE_H - 33 * MM, GOLD);
-        flourish(c, cx, PAGE_H - 39 * MM, 30 * MM);
-        centered(c, "20 Agosto 2026", PDType1Font.TIMES_ROMAN,
-                14, cx, PAGE_H - 48 * MM, CREAM);
-        centered(c, "M I L A N O", PDType1Font.HELVETICA_BOLD,
-                9, cx, PAGE_H - 54.5f * MM, GOLD);
-        dottedLine(c, left, right, PAGE_H - 62.5f * MM);
-        centered(c, "Vi aspettiamo per festeggiare insieme a noi",
-                PDType1Font.TIMES_ITALIC, 9, cx, MARGIN + 9 * MM, CREAM);
-        heart(c, cx, MARGIN + 4 * MM, 3.4f * MM, CREAM);
-        flourish(c, cx, MARGIN + 2.2f * MM, 23 * MM);
+        heart(c, cx, 92 * MM, 4 * MM, CREAM);
+        flourish(c, cx, 88.5f * MM, 25 * MM);
+        centered(c, "Avec la bénédiction des grandes familles",
+                PDType1Font.TIMES_ROMAN, 7.5f, cx, 83.5f * MM, CREAM);
+        centeredFit(c, "Tchiengue et Tchomtchi", PDType1Font.TIMES_ROMAN,
+                15, 11, width, cx, 77.5f * MM, GOLD);
+        centered(c, "les enfants", PDType1Font.TIMES_ROMAN,
+                7.5f, cx, 72.5f * MM, CREAM);
+        centeredFit(c, "Gill Tchiengue", PDType1Font.TIMES_ITALIC,
+                19, 14, width, cx, 66.8f * MM, GOLD);
+        centered(c, "&", PDType1Font.TIMES_ITALIC, 17, cx, 61.3f * MM, GOLD);
+        centeredFit(c, "Xaviera Tchomtchi", PDType1Font.TIMES_ITALIC,
+                19, 13, width, cx, 55.8f * MM, GOLD);
+        centered(c, "Ont la joie de vous convier", PDType1Font.TIMES_ROMAN,
+                7.5f, cx, 51 * MM, CREAM);
+        centered(c, "à leur union nuptial", PDType1Font.TIMES_ROMAN,
+                7.5f, cx, 47.8f * MM, CREAM);
+        flourish(c, cx, 44.8f * MM, 18 * MM);
+        centeredFit(c, "Samedi 24 octobre 2026", PDType1Font.TIMES_ROMAN,
+                13, 10, width, cx, 40.3f * MM, CREAM);
+        centered(c, "À 16 HEURES PRÉCISES", PDType1Font.HELVETICA_BOLD,
+                6, cx, 35.7f * MM, GOLD);
+        centered(c, "AU CLUB PAD", PDType1Font.HELVETICA,
+                9, cx, 32.3f * MM, CREAM);
+        centered(c, "total bonanjo douala", PDType1Font.TIMES_ROMAN,
+                7, cx, 29.3f * MM, CREAM);
+        flourish(c, cx, 26.7f * MM, 17 * MM);
+        centered(c, "SUIVI DE LA SOIRÉE AU MÊME ENDROIT", PDType1Font.HELVETICA,
+                5.4f, cx, 23.2f * MM, GOLD);
+        centered(c, "À PARTIR DE 19H.", PDType1Font.HELVETICA,
+                5.4f, cx, 20.5f * MM, GOLD);
+        centered(c, "Nous vous invitons à vous présenter", PDType1Font.TIMES_ROMAN,
+                6.2f, cx, 16.5f * MM, CREAM);
+        centered(c, "dans votre tenue de soirée", PDType1Font.TIMES_ROMAN,
+                6.2f, cx, 13.7f * MM, CREAM);
+        centered(c, "afin de profiter de cette belle", PDType1Font.TIMES_ROMAN,
+                6.2f, cx, 10.9f * MM, CREAM);
+        centered(c, "fête avec nous", PDType1Font.TIMES_ITALIC,
+                12, cx, 7.2f * MM, GOLD);
+        heart(c, cx, 5.2f * MM, 2.5f * MM, CREAM);
     }
 
     private void drawGuestPanel(PDDocument document, PDPageContentStream c, Guest guest)
@@ -134,16 +160,19 @@ public class InviteGeneratorService {
         float width = right - left;
         float y = PAGE_H - MARGIN - 8 * MM;
 
-        centered(c, "Invito personale", PDType1Font.TIMES_ITALIC, 9, cx, y, GOLD);
-        y -= 5 * MM;
-        centered(c, "Mostra questo codice all'ingresso",
-                PDType1Font.HELVETICA, 6.5f, cx, y, CREAM);
+        centered(c, "Invitation personnelle", PDType1Font.TIMES_ITALIC, 9, cx, y, GOLD);
+        flourish(c, cx, y - 3.5f * MM, 25 * MM);
+        y -= 8 * MM;
+        centered(c, "MERCI DE PRÉSENTER CE CODE",
+                PDType1Font.HELVETICA, 5.8f, cx, y, CREAM);
+        y -= 3.2f * MM;
+        centered(c, "À L'ACCUEIL", PDType1Font.HELVETICA, 5.8f, cx, y, CREAM);
 
-        float qrSize = 32 * MM;
+        float qrSize = 28 * MM;
         float pad = 2.5f * MM;
         float boxSize = qrSize + 2 * pad;
         float boxX = cx - boxSize / 2;
-        float boxY = y - 6 * MM - boxSize;
+        float boxY = y - 4 * MM - boxSize;
         fill(c, Color.WHITE);
         stroke(c, GOLD);
         c.setLineWidth(1);
@@ -152,25 +181,31 @@ public class InviteGeneratorService {
         PDImageXObject qr = LosslessFactory.createFromImage(document, qrImage(guest.getId()));
         c.drawImage(qr, boxX + pad, boxY + pad, qrSize, qrSize);
 
-        y = boxY - 3 * MM;
-        centered(c, "I N V I T A T O", PDType1Font.HELVETICA, 6.5f, cx, y, GOLD);
-        y -= 3.8f * MM;
+        y = boxY - 2.8f * MM;
+        centered(c, "I N V I T É ( E )", PDType1Font.HELVETICA, 6.2f, cx, y, GOLD);
+        y -= 3.6f * MM;
         centeredFit(c, guest.getNome(), PDType1Font.TIMES_BOLD,
                 11, 7, width, cx, y, CREAM);
-        y -= 3 * MM;
+        y -= 2.8f * MM;
         dottedLine(c, left, right, y);
-        y -= 3 * MM;
-        centered(c, "T A V O L O", PDType1Font.HELVETICA, 6.5f, cx, y, GOLD);
-        y -= 3.8f * MM;
+        y -= 2.8f * MM;
+        centered(c, "T A B L E", PDType1Font.HELVETICA, 6.2f, cx, y, GOLD);
+        y -= 3.5f * MM;
         centered(c, valueOrDash(guest.getTavolo()), PDType1Font.TIMES_BOLD, 13, cx, y, CREAM);
         String tableName = resolveTableName(guest);
         if (!blank(tableName)) {
-            y -= 3.8f * MM;
-            centered(c, "N O M E   T A V O L O", PDType1Font.HELVETICA, 6, cx, y, GOLD);
             y -= 3.5f * MM;
+            centered(c, "N O M   D E   T A B L E", PDType1Font.HELVETICA, 5.8f, cx, y, GOLD);
+            y -= 3.3f * MM;
             centeredFit(c, tableName.toUpperCase(), PDType1Font.TIMES_BOLD,
                     9, 6, width, cx, y, CREAM);
+            y -= 2.5f * MM;
+            dottedLine(c, left, right, y);
         }
+        centered(c, "MERCI DE CONFIRMER", PDType1Font.HELVETICA,
+                5.2f, cx, 8 * MM, GOLD);
+        centered(c, "VOTRE PRÉSENCE", PDType1Font.HELVETICA,
+                5.2f, cx, 5.8f * MM, GOLD);
     }
 
     /**
@@ -203,7 +238,22 @@ public class InviteGeneratorService {
         }
     }
 
-    private void drawFloralBorder(PDPageContentStream c) throws IOException {
+    private void drawFloralBorder(PDDocument document, PDPageContentStream c) throws IOException {
+        try (InputStream source = getClass().getResourceAsStream("/invite/floral-border.png")) {
+            if (source != null) {
+                BufferedImage flowers = ImageIO.read(source);
+                PDImageXObject image = LosslessFactory.createFromImage(document, flowers);
+                float height = PAGE_H - 2 * MM;
+                float width = height * flowers.getWidth() / flowers.getHeight();
+                c.drawImage(image, 0, MM, width, height);
+                return;
+            }
+        }
+        drawVectorFloralBorder(c);
+    }
+
+    /** Ripiego vettoriale se la risorsa floreale non fosse nel classpath. */
+    private void drawVectorFloralBorder(PDPageContentStream c) throws IOException {
         float x = MARGIN + 7 * MM;
         stroke(c, LEAF_LIGHT);
         c.setLineWidth(1);

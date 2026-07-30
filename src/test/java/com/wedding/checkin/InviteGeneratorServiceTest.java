@@ -37,7 +37,13 @@ class InviteGeneratorServiceTest {
             assertEquals(100 * MM, document.getPage(0).getMediaBox().getHeight(), .1f);
 
             String text = new PDFTextStripper().getText(document);
-            assertTrue(text.contains("Tamara & Nicolas"));
+            assertTrue(text.contains("Tchiengue et Tchomtchi"));
+            assertTrue(text.contains("Gill Tchiengue"));
+            assertTrue(text.contains("Xaviera Tchomtchi"));
+            assertTrue(text.contains("Samedi 24 octobre 2026"));
+            assertTrue(text.contains("AU CLUB PAD"));
+            assertTrue(text.contains("À PARTIR DE 19H."));
+            assertTrue(text.contains("MERCI DE CONFIRMER"));
             assertTrue(text.contains("Anna Bianchi"));
             assertTrue(text.contains("7"));
             assertTrue(text.contains("ARMONIA"));
