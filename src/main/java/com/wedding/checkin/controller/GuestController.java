@@ -5,6 +5,7 @@ import com.wedding.checkin.repository.GuestRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -59,6 +60,7 @@ public class GuestController {
      * Non tocca lo stato di check-in di invitati gia' presenti.
      */
     @PostMapping(value = "/import", consumes = MediaType.TEXT_PLAIN_VALUE)
+    @Transactional
     public Map<String, Object> importCsv(@RequestBody String csv,
                                           @RequestHeader(value = "X-Staff-Pin", required = false) String pin) {
         checkStaffPin(pin);

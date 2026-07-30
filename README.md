@@ -40,11 +40,11 @@ L'app parte sulla porta **8443** in **HTTPS** (certificato self-signed incluso) 
 
 ```
 id,nome,tavolo,nomeTavolo
-0001,Mario Rossi,8,Pazienza
+0001,Mario Rossi et Daniela Telemaco,8,Pazienza
 0002,Anna Bianchi,3,Amore
 ```
 
-Il quarto campo (`nomeTavolo`) e' opzionale: un CSV a 3 colonne (`id,nome,tavolo`, senza nome tavolo) resta valido e viene importato normalmente. Il CSV generato da `generate_invite.py` include sempre tutte e 4 le colonne.
+Il quarto campo (`nomeTavolo`) è opzionale.
 
 ## Dati e persistenza
 
