@@ -70,6 +70,7 @@ public class InviteGeneratorService {
             try (PDPageContentStream c = new PDPageContentStream(document, page)) {
                 drawBackground(c);
                 drawFloralBorder(document, c);
+                drawTicketContours(c);
                 drawDivider(c);
                 drawInvitationPanel(c);
                 drawGuestPanel(document, c, guest);
@@ -82,26 +83,84 @@ public class InviteGeneratorService {
     }
 
     private void drawBackground(PDPageContentStream c) throws IOException {
-        fill(c, GREEN_DARK);
+        fill(c, Color.WHITE);
         c.addRect(0, 0, PAGE_W, PAGE_H);
         c.fill();
+        fill(c, GREEN_DARK);
+        roundedRect(c, MARGIN, MARGIN, PAGE_W - 2 * MARGIN,
+                PAGE_H - 2 * MARGIN, 4 * MM, true, false);
+    }
+
+    private void drawTicketContours(PDPageContentStream c) throws IOException {
+        float bottom = MARGIN;
+        float top = PAGE_H - MARGIN;
+        float rightPanelCx = (DIVIDER_X + PAGE_W - MARGIN) / 2;
+
+        // Cornice esterna arrotondata.
         stroke(c, GOLD);
         c.setLineWidth(1.1f);
-        c.addRect(MARGIN, MARGIN, PAGE_W - 2 * MARGIN, PAGE_H - 2 * MARGIN);
+        roundedRect(c, MARGIN, bottom, PAGE_W - 2 * MARGIN,
+                top - bottom, 4 * MM, false, true);
+
+        // Incavo semicircolare superiore del tagliando personale.
+        float topNotch = 5.2f * MM;
+        fill(c, Color.WHITE);
+        circle(c, rightPanelCx, top, topNotch, true);
+        stroke(c, GOLD);
+        c.setLineWidth(.8f);
+        c.moveTo(rightPanelCx - topNotch, top);
+        c.curveTo(rightPanelCx - topNotch, top - topNotch * .55f,
+                rightPanelCx - topNotch * .55f, top - topNotch,
+                rightPanelCx, top - topNotch);
+        c.curveTo(rightPanelCx + topNotch * .55f, top - topNotch,
+                rightPanelCx + topNotch, top - topNotch * .55f,
+                rightPanelCx + topNotch, top);
         c.stroke();
     }
 
     private void drawDivider(PDPageContentStream c) throws IOException {
+        float bottom = MARGIN;
+        float top = PAGE_H - MARGIN;
+        float notch = 2.5f * MM;
+
+        // Incavi della linea di strappo sui bordi superiore e inferiore.
+        fill(c, Color.WHITE);
+        circle(c, DIVIDER_X, top, notch, true);
+        circle(c, DIVIDER_X, bottom, notch, true);
+
         stroke(c, GOLD);
         c.setLineWidth(.6f);
-        c.setLineDashPattern(new float[]{2, 2}, 0);
-        c.moveTo(DIVIDER_X, MARGIN);
-        c.lineTo(DIVIDER_X, PAGE_H - MARGIN);
+        c.moveTo(DIVIDER_X - notch, top);
+        c.curveTo(DIVIDER_X - notch, top - notch * .55f,
+                DIVIDER_X - notch * .55f, top - notch,
+                DIVIDER_X, top - notch);
+        c.curveTo(DIVIDER_X + notch * .55f, top - notch,
+                DIVIDER_X + notch, top - notch * .55f,
+                DIVIDER_X + notch, top);
         c.stroke();
-        c.setLineDashPattern(new float[]{}, 0);
-        fill(c, Color.WHITE);
-        circle(c, DIVIDER_X, MARGIN, 2.2f * MM, true);
-        circle(c, DIVIDER_X, PAGE_H - MARGIN, 2.2f * MM, true);
+
+        c.moveTo(DIVIDER_X - notch, bottom);
+        c.curveTo(DIVIDER_X - notch, bottom + notch * .55f,
+                DIVIDER_X - notch * .55f, bottom + notch,
+                DIVIDER_X, bottom + notch);
+        c.curveTo(DIVIDER_X + notch * .55f, bottom + notch,
+                DIVIDER_X + notch, bottom + notch * .55f,
+                DIVIDER_X + notch, bottom);
+        c.stroke();
+
+        // Bordo ondulato/perforato centrale, come un tagliando staccabile.
+        c.setLineWidth(.45f);
+        float y = bottom + notch;
+        float step = 1.35f * MM;
+        boolean right = true;
+        c.moveTo(DIVIDER_X, y);
+        while (y + step < top - notch) {
+            y += step;
+            c.lineTo(DIVIDER_X + (right ? .65f : -.65f) * MM, y);
+            right = !right;
+        }
+        c.lineTo(DIVIDER_X, top - notch);
+        c.stroke();
     }
 
     private void drawInvitationPanel(PDPageContentStream c) throws IOException {
@@ -176,8 +235,7 @@ public class InviteGeneratorService {
         fill(c, Color.WHITE);
         stroke(c, GOLD);
         c.setLineWidth(1);
-        c.addRect(boxX, boxY, boxSize, boxSize);
-        c.fillAndStroke();
+        roundedRect(c, boxX, boxY, boxSize, boxSize, 2.2f * MM, true, true);
         PDImageXObject qr = LosslessFactory.createFromImage(document, qrImage(guest.getId()));
         c.drawImage(qr, boxX + pad, boxY + pad, qrSize, qrSize);
 
@@ -243,9 +301,9 @@ public class InviteGeneratorService {
             if (source != null) {
                 BufferedImage flowers = ImageIO.read(source);
                 PDImageXObject image = LosslessFactory.createFromImage(document, flowers);
-                float height = PAGE_H - 2 * MM;
+                float height = PAGE_H - 2 * MARGIN;
                 float width = height * flowers.getWidth() / flowers.getHeight();
-                c.drawImage(image, 0, MM, width, height);
+                c.drawImage(image, MARGIN, MARGIN, width, height);
                 return;
             }
         }
@@ -391,6 +449,27 @@ public class InviteGeneratorService {
         c.curveTo(cx + k * rx, cy - ry, cx + rx, cy - k * ry, cx + rx, cy);
         c.closePath();
         c.fill();
+    }
+
+    private void roundedRect(PDPageContentStream c, float x, float y, float width,
+                             float height, float radius, boolean fill, boolean stroke)
+            throws IOException {
+        float r = Math.min(radius, Math.min(width, height) / 2);
+        float k = .55228475f * r;
+        c.moveTo(x + r, y);
+        c.lineTo(x + width - r, y);
+        c.curveTo(x + width - r + k, y, x + width, y + r - k, x + width, y + r);
+        c.lineTo(x + width, y + height - r);
+        c.curveTo(x + width, y + height - r + k,
+                x + width - r + k, y + height, x + width - r, y + height);
+        c.lineTo(x + r, y + height);
+        c.curveTo(x + r - k, y + height, x, y + height - r + k, x, y + height - r);
+        c.lineTo(x, y + r);
+        c.curveTo(x, y + r - k, x + r - k, y, x + r, y);
+        c.closePath();
+        if (fill && stroke) c.fillAndStroke();
+        else if (fill) c.fill();
+        else if (stroke) c.stroke();
     }
 
     private void circle(PDPageContentStream c, float cx, float cy, float radius, boolean fill)
