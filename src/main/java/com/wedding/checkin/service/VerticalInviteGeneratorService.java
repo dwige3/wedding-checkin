@@ -1,11 +1,5 @@
 package com.wedding.checkin.service;
 
-import com.google.zxing.BarcodeFormat;
-import com.google.zxing.EncodeHintType;
-import com.google.zxing.client.j2se.MatrixToImageConfig;
-import com.google.zxing.client.j2se.MatrixToImageWriter;
-import com.google.zxing.qrcode.QRCodeWriter;
-import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 import com.wedding.checkin.model.Guest;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -16,6 +10,7 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.apache.pdfbox.util.Matrix;
 import org.springframework.stereotype.Service;
 
 import javax.imageio.ImageIO;
@@ -38,6 +33,10 @@ public class VerticalInviteGeneratorService {
     private static final Color GREEN = new Color(7, 48, 35);
     private static final Color GOLD = new Color(224, 174, 83);
     private static final Color CREAM = new Color(249, 245, 232);
+    private static final Color MASTER_GREEN = new Color(0, 27, 14);
+    // Bordo/rametti del pannello sinistro nella maquette sono bianco-argento
+    // (effetto vetro), non oro: l'oro resta solo sul tagliando destro.
+    private static final Color PLAQUE_EDGE = new Color(232, 236, 233);
     private static final Map<Integer, String> TABLE_NAMES = Map.ofEntries(
             Map.entry(1, "Amore"), Map.entry(2, "Pazienza"), Map.entry(3, "Fiducia"),
             Map.entry(4, "Rispetto"), Map.entry(5, "Gioia"), Map.entry(6, "Serenità"),
@@ -48,14 +47,15 @@ public class VerticalInviteGeneratorService {
     // Dimensioni fisiche del pannello dove viene disegnata la composizione
     // floreale, usate per calcolare la risoluzione (DPI) davvero necessaria.
     private static final float MAIN_PANEL_W_MM = 88f;
-    private static final float MAIN_PANEL_H_MM = 192f;
-    private static final int IMAGE_DPI = 300;
+    private static final float MAIN_PANEL_H_MM = 180f;
+    private static final int IMAGE_DPI = 196;
 
     // Immagine e font caricati/ridimensionati una sola volta per istanza del
     // servizio (bean singleton di Spring), non ad ogni generate(): con 400
     // inviti evita di ridecodificare da disco e di incorporare un PNG a piena
     // risoluzione (~620 DPI) in ognuno dei 400 PDF, appesantendo lo zip finale.
     private final BufferedImage cornerFlowers = loadCornerFlowers();
+    private final BufferedImage masterImage = loadMasterImage();
     private final byte[] scriptFontBytes = loadScriptFontBytes();
 
     private static BufferedImage loadCornerFlowers() {
@@ -65,6 +65,18 @@ public class VerticalInviteGeneratorService {
                 return null;
             }
             return scaleToDpi(ImageIO.read(source), MAIN_PANEL_W_MM, MAIN_PANEL_H_MM, IMAGE_DPI);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private static BufferedImage loadMasterImage() {
+        try (InputStream source = VerticalInviteGeneratorService.class
+                .getResourceAsStream("/invite/vertical-master.png")) {
+            if (source == null) {
+                return null;
+            }
+            return scaleToDpi(ImageIO.read(source), 140f, 200f, IMAGE_DPI);
         } catch (IOException e) {
             return null;
         }
@@ -106,14 +118,12 @@ public class VerticalInviteGeneratorService {
             PDPage page = new PDPage(new PDRectangle(PAGE_W, PAGE_H));
             document.addPage(page);
             try (PDPageContentStream c = new PDPageContentStream(document, page)) {
-                PDFont scriptFont = scriptFontBytes == null
-                        ? PDType1Font.TIMES_ITALIC
-                        : PDType0Font.load(document, new ByteArrayInputStream(scriptFontBytes));
-                fill(c, new Color(3, 31, 23));
-                c.addRect(0, 0, PAGE_W, PAGE_H);
-                c.fill();
-                drawMainPanel(document, c, scriptFont);
-                drawTicket(document, c, guest);
+                if (masterImage == null) {
+                    throw new IllegalStateException("Template verticale master non trovato");
+                }
+                PDImageXObject master = LosslessFactory.createFromImage(document, masterImage);
+                c.drawImage(master, 0, 0, PAGE_W, PAGE_H);
+                drawDynamicMasterFields(c, guest);
             }
             document.save(output);
             return output.toByteArray();
@@ -122,20 +132,106 @@ public class VerticalInviteGeneratorService {
         }
     }
 
+    private void drawDynamicMasterFields(PDPageContentStream c, Guest guest) throws IOException {
+        // Le aree sono campionate dal verde uniforme del master. Tutto il
+        // resto dell'immagine rimane esattamente quello fornito dall'utente.
+        cover(c, 101 * MM, 121.5f * MM, 29 * MM, 22 * MM); // titolo + nome
+        cover(c, 127.2f * MM, 152.5f * MM, 8.3f * MM, 7 * MM); // cuori, senza toccare la n
+        cover(c, 113.5f * MM, 84 * MM, 11 * MM, 7 * MM); // numero tavolo
+        cover(c, 104 * MM, 59.5f * MM, 24 * MM, 7 * MM); // nome tavolo
+
+        float ticketCx = 115 * MM;
+        boolean couple = isCouple(guest.getNome());
+        String sharedSurnameLabel = sharedSurnameLabel(guest.getNome());
+        if (sharedSurnameLabel == null) {
+            centered(c, invitationTitle(guest.getNome()), PDType1Font.TIMES_BOLD,
+                    9, ticketCx, 139.2f * MM, CREAM);
+        }
+
+        String[] nameLines = sharedSurnameLabel == null
+                ? splitGuestName(displayName(guest.getNome()))
+                : new String[]{sharedSurnameLabel};
+        if (nameLines.length == 1) {
+            centeredFit(c, nameLines[0], PDType1Font.TIMES_BOLD,
+                    13, 6.5f, 28 * MM, ticketCx,
+                    sharedSurnameLabel == null ? 129 * MM : 133 * MM, CREAM);
+        } else {
+            centeredFit(c, nameLines[0], PDType1Font.TIMES_BOLD,
+                    13, 7, 27 * MM, ticketCx, 132 * MM, CREAM);
+            centeredFit(c, nameLines[1], PDType1Font.TIMES_BOLD,
+                    13, 7, 27 * MM, ticketCx, 125.5f * MM, CREAM);
+        }
+
+        if (couple) {
+            heart(c, 128.5f * MM, 155.5f * MM, 2.5f * MM, CREAM);
+            heart(c, 133 * MM, 155.5f * MM, 2.5f * MM, CREAM);
+        } else {
+            heart(c, 130.7f * MM, 155.5f * MM, 2.5f * MM, CREAM);
+        }
+
+        centeredFit(c, valueOrDash(guest.getTavolo()), PDType1Font.TIMES_ROMAN,
+                14, 9, 10 * MM, 119 * MM, 85.5f * MM, CREAM);
+        centeredFit(c, resolveTableName(guest), PDType1Font.TIMES_ROMAN,
+                11, 7, 23 * MM, ticketCx, 61.5f * MM, CREAM);
+    }
+
+    private void cover(PDPageContentStream c, float x, float y, float w, float h)
+            throws IOException {
+        fill(c, MASTER_GREEN);
+        c.addRect(x, y, w, h);
+        c.fill();
+    }
+
+    private String[] splitGuestName(String name) {
+        String[] couple = name.split("(?i)\\s+(?:et|&)\\s+", 2);
+        if (couple.length == 2) {
+            return couple;
+        }
+        if (name.length() <= 22 || !name.contains(" ")) {
+            return new String[]{name};
+        }
+        int middle = name.length() / 2;
+        int split = name.indexOf(' ', middle);
+        if (split < 0) split = name.lastIndexOf(' ', middle);
+        return split > 0
+                ? new String[]{name.substring(0, split), name.substring(split + 1)}
+                : new String[]{name};
+    }
+
+    private String sharedSurnameLabel(String name) {
+        if (name == null) {
+            return null;
+        }
+        String trimmed = name.trim();
+        if (trimmed.matches("(?i)^m\\.?\\s+et\\s+mme\\.?\\s+.+")) {
+            String surname = trimmed.replaceFirst(
+                    "(?i)^m\\.?\\s+et\\s+mme\\.?\\s+", "").trim();
+            return "M et Mme " + surname;
+        }
+        if (trimmed.matches("(?i)^monsieur\\s+et\\s+madame\\s+.+")) {
+            String surname = trimmed.replaceFirst(
+                    "(?i)^monsieur\\s+et\\s+madame\\s+", "").trim();
+            return "Monsieur et Madame " + surname;
+        }
+        return null;
+    }
+
     private void drawMainPanel(PDDocument document, PDPageContentStream c, PDFont scriptFont)
             throws IOException {
-        float x = 2.5f * MM, y = 4 * MM, w = 88 * MM, h = 192 * MM;
+        float x = 2.5f * MM, y = 8 * MM, w = 88 * MM, h = 180 * MM;
         fill(c, GREEN);
         roundedRect(c, x, y, w, h, 3 * MM, true, false);
 
-        // Doppio bordo dorato effetto lastra/acrilico.
-        stroke(c, GOLD);
+        // Doppio bordo bianco/argento effetto lastra/acrilico, come nella
+        // maquette: il pannello sinistro resta bianco-avorio, l'oro e'
+        // riservato al tagliando destro.
+        stroke(c, PLAQUE_EDGE);
         c.setLineWidth(1.3f);
         roundedRect(c, x, y, w, h, 3 * MM, false, true);
         c.setLineWidth(.55f);
         roundedRect(c, x + 2 * MM, y + 2 * MM, w - 4 * MM, h - 4 * MM,
                 2 * MM, false, true);
-        stroke(c, new Color(178, 145, 74));
+        stroke(c, new Color(150, 160, 156));
         c.setLineWidth(.35f);
         roundedRect(c, x + 3.2f * MM, y + 3.2f * MM, w - 6.4f * MM,
                 h - 6.4f * MM, 1.5f * MM, false, true);
@@ -152,12 +248,14 @@ public class VerticalInviteGeneratorService {
         metalStud(c, x + 6 * MM, y + 7 * MM, 2.7f * MM);
         metalStud(c, x + w - 6 * MM, y + 7 * MM, 2.7f * MM);
 
+        c.saveGraphicsState();
+        c.transform(Matrix.getTranslateInstance(0, -8 * MM));
         float cx = x + w * .58f;
         float lowerCx = x + w * .45f;
         float tw = 59 * MM;
         centered(c, "Avec la bénédiction des grandes familles :", PDType1Font.TIMES_ROMAN,
                 7, cx, 180 * MM, CREAM);
-        ornamentalFlourish(c, cx, 174.5f * MM, 24 * MM);
+        ornamentalFlourish(c, cx, 174.5f * MM, 24 * MM, PLAQUE_EDGE);
         heart(c, cx, 174.5f * MM, 3.8f * MM, CREAM);
         centeredFit(c, "Tchiengue et Tchomtchi", PDType1Font.TIMES_BOLD,
                 17, 11, tw, cx, 166.5f * MM, CREAM);
@@ -165,8 +263,8 @@ public class VerticalInviteGeneratorService {
         centeredFit(c, "Xaviera Tchomtchi", scriptFont,
                 25, 16, tw, cx, 150 * MM, CREAM);
         centered(c, "&", PDType1Font.TIMES_BOLD, 23, cx, 140.5f * MM, CREAM);
-        leafBranch(c, cx - 15 * MM, 142 * MM, 12 * MM, false, GOLD);
-        leafBranch(c, cx + 15 * MM, 142 * MM, 12 * MM, true, GOLD);
+        leafBranch(c, cx - 15 * MM, 142 * MM, 12 * MM, false, PLAQUE_EDGE);
+        leafBranch(c, cx + 15 * MM, 142 * MM, 12 * MM, true, PLAQUE_EDGE);
         centeredFit(c, "Gill Tchiengue", scriptFont,
                 25, 16, tw, cx, 131.5f * MM, CREAM);
         heart(c, cx, 123 * MM, 3 * MM, CREAM);
@@ -174,23 +272,23 @@ public class VerticalInviteGeneratorService {
                 8, cx, 117 * MM, CREAM);
         centered(c, "à leur union nuptial", PDType1Font.TIMES_ROMAN,
                 8, cx, 112.5f * MM, CREAM);
-        flourish(c, cx, 107 * MM, 23 * MM, GOLD);
+        flourish(c, cx, 107 * MM, 23 * MM, PLAQUE_EDGE);
         centeredFit(c, "Samedi 24 octobre 2026", PDType1Font.TIMES_BOLD,
                 16, 11, tw, cx, 99.5f * MM, CREAM);
-        flourish(c, cx, 94 * MM, 23 * MM, GOLD);
+        flourish(c, cx, 94 * MM, 23 * MM, PLAQUE_EDGE);
         centered(c, "À 15 h précises", PDType1Font.TIMES_ROMAN,
                 9, cx, 86.5f * MM, CREAM);
-        flourish(c, cx, 81 * MM, 20 * MM, GOLD);
+        flourish(c, cx, 81 * MM, 20 * MM, PLAQUE_EDGE);
         centered(c, "Au club PAD", PDType1Font.TIMES_BOLD,
                 13, cx, 73.5f * MM, CREAM);
         centered(c, "total bonanjo douala", PDType1Font.TIMES_ROMAN,
                 8, cx, 68.5f * MM, CREAM);
-        flourish(c, cx, 63 * MM, 20 * MM, GOLD);
+        flourish(c, cx, 63 * MM, 20 * MM, PLAQUE_EDGE);
         centered(c, "suivi de la soirée au même endroit", PDType1Font.TIMES_ROMAN,
                 7, lowerCx, 57.5f * MM, CREAM);
         centered(c, "à partir de 19h.", PDType1Font.TIMES_ROMAN,
                 7, lowerCx, 53.5f * MM, CREAM);
-        flourish(c, lowerCx, 49 * MM, 18 * MM, GOLD);
+        flourish(c, lowerCx, 49 * MM, 18 * MM, PLAQUE_EDGE);
         centered(c, "Nous vous invitons à vous présenter", PDType1Font.TIMES_ROMAN,
                 6.8f, lowerCx, 43.5f * MM, CREAM);
         centered(c, "dans votre tenue de soirée", PDType1Font.TIMES_ROMAN,
@@ -199,10 +297,11 @@ public class VerticalInviteGeneratorService {
                 6.8f, lowerCx, 35.5f * MM, CREAM);
         centered(c, "avec nous.", PDType1Font.TIMES_ROMAN,
                 6.8f, lowerCx, 31.5f * MM, CREAM);
+        c.restoreGraphicsState();
     }
 
-    private void drawTicket(PDDocument document, PDPageContentStream c, Guest guest) throws IOException {
-        float x = 92.5f * MM, y = 4 * MM, w = 45 * MM, h = 192 * MM;
+    private void drawTicket(PDPageContentStream c, Guest guest) throws IOException {
+        float x = 92.5f * MM, y = 8 * MM, w = 45 * MM, h = 180 * MM;
         float cx = x + w / 2;
         fill(c, GREEN);
         stroke(c, GOLD);
@@ -210,8 +309,10 @@ public class VerticalInviteGeneratorService {
         ticketPath(c, x, y, w, h, 3 * MM, 6 * MM);
         c.fillAndStroke();
 
+        c.saveGraphicsState();
+        c.transform(Matrix.getTranslateInstance(0, -14 * MM));
         heart(c, cx, 184 * MM, 3.2f * MM, CREAM);
-        ornamentalFlourish(c, cx, 178.5f * MM, 18 * MM);
+        ornamentalFlourish(c, cx, 178.5f * MM, 18 * MM, GOLD);
         centered(c, "Invitation", PDType1Font.TIMES_BOLD,
                 18, cx, 168.5f * MM, CREAM);
         if (isCouple(guest.getNome())) {
@@ -239,43 +340,20 @@ public class VerticalInviteGeneratorService {
         dotted(c, cx - 4 * MM, cx + 4 * MM, 107 * MM);
         flourish(c, cx, 100 * MM, 18 * MM, GOLD);
         centered(c, "Nommée :", PDType1Font.TIMES_ROMAN, 8, cx, 91 * MM, CREAM);
-        centeredFit(c, resolveTableName(guest).toUpperCase(), PDType1Font.TIMES_BOLD,
+        centeredFit(c, resolveTableName(guest), PDType1Font.TIMES_BOLD,
                 12, 7, 34 * MM, cx, 85 * MM, CREAM);
         dotted(c, x + 5 * MM, x + w - 5 * MM, 80 * MM);
 
-        // Codice di ingresso: elemento funzionale (serve alla scansione allo
-        // staff), sostituisce la riga di riempimento e il trio puramente
-        // decorativo che occupavano questo spazio.
-        centered(c, "Présentez ce code à l'entrée", PDType1Font.HELVETICA,
-                5.4f, cx, 73 * MM, GOLD);
-        float qrSize = 24 * MM;
-        float qrPad = 2 * MM;
-        float qrBoxSize = qrSize + 2 * qrPad;
-        float qrBoxX = cx - qrBoxSize / 2;
-        float qrBoxY = 42 * MM;
-        fill(c, Color.WHITE);
-        stroke(c, GOLD);
-        c.setLineWidth(1);
-        roundedRect(c, qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 1.8f * MM, true, true);
-        PDImageXObject qr = LosslessFactory.createFromImage(document, qrImage(guest.getId()));
-        c.drawImage(qr, qrBoxX + qrPad, qrBoxY + qrPad, qrSize, qrSize);
-
+        centered(c, "À l'occasion de notre mariage.", PDType1Font.TIMES_ROMAN,
+                6.5f, cx, 69 * MM, CREAM);
+        ornamentalFlourish(c, cx, 60 * MM, 20 * MM, GOLD);
+        heart(c, cx, 56 * MM, 3.5f * MM, CREAM);
+        flourish(c, cx, 49 * MM, 22 * MM, GOLD);
         centered(c, "Merci de confirmer", PDType1Font.TIMES_ROMAN,
                 8, cx, 38 * MM, CREAM);
         centered(c, "votre présence.", PDType1Font.TIMES_ROMAN,
                 8, cx, 32.5f * MM, CREAM);
-    }
-
-    private BufferedImage qrImage(String payload) {
-        try {
-            var matrix = new QRCodeWriter().encode(payload, BarcodeFormat.QR_CODE, 500, 500,
-                    Map.of(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.M,
-                            EncodeHintType.MARGIN, 1));
-            return MatrixToImageWriter.toBufferedImage(matrix,
-                    new MatrixToImageConfig(GREEN.getRGB(), Color.WHITE.getRGB()));
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Impossibile creare il QR per l'id " + payload, e);
-        }
+        c.restoreGraphicsState();
     }
 
     /** Toglie l'onorifico (già mostrato come titolo sopra) dal nome
@@ -286,6 +364,11 @@ public class VerticalInviteGeneratorService {
         }
         String trimmed = name.trim();
         String lower = trimmed.toLowerCase();
+        String sharedSurname = trimmed.replaceFirst(
+                "(?i)^(?:m\\.?\\s+et\\s+mme\\.?|monsieur\\s+et\\s+madame)\\s+", "");
+        if (!sharedSurname.equals(trimmed)) {
+            return sharedSurname.trim();
+        }
         for (String prefix : new String[]{"mme ", "madame ", "m. ", "monsieur "}) {
             if (lower.startsWith(prefix)) {
                 return trimmed.substring(prefix.length()).trim();
@@ -334,6 +417,9 @@ public class VerticalInviteGeneratorService {
         circle(c, cx, cy, r, false);
     }
 
+    /** Sagoma "badge": rettangolo arrotondato con un'unica tacca semicircolare
+     * in alto al centro, bordi lisci — come nella maquette (nessun dente o
+     * perforazione sul lato sinistro). */
     private void ticketPath(PDPageContentStream c, float x, float y, float w, float h,
                             float radius, float notch) throws IOException {
         float top = y + h, right = x + w, cx = x + w / 2;
@@ -363,7 +449,7 @@ public class VerticalInviteGeneratorService {
 
     private void cornerDetail(PDPageContentStream c, float x, float y, float w, float h)
             throws IOException {
-        stroke(c, GOLD);
+        stroke(c, PLAQUE_EDGE);
         c.setLineWidth(.55f);
         float r = 10 * MM;
 
@@ -421,9 +507,9 @@ public class VerticalInviteGeneratorService {
         c.fill();
     }
 
-    private void ornamentalFlourish(PDPageContentStream c, float cx, float y, float width)
+    private void ornamentalFlourish(PDPageContentStream c, float cx, float y, float width, Color color)
             throws IOException {
-        stroke(c, GOLD);
+        stroke(c, color);
         c.setLineWidth(.55f);
         float half = width / 2;
         c.moveTo(cx - half, y);
@@ -433,7 +519,7 @@ public class VerticalInviteGeneratorService {
         c.curveTo(cx + half * .72f, y + 2.2f * MM,
                 cx + half * .45f, y - 2.2f * MM, cx + 1.8f * MM, y);
         c.stroke();
-        fill(c, GOLD);
+        fill(c, color);
         float d = 1.1f * MM;
         c.moveTo(cx, y + d);
         c.lineTo(cx + d, y);
