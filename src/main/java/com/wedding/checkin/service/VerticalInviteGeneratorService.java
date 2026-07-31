@@ -136,6 +136,7 @@ public class VerticalInviteGeneratorService {
         // Le aree sono campionate dal verde uniforme del master. Tutto il
         // resto dell'immagine rimane esattamente quello fornito dall'utente.
         cover(c, 101 * MM, 121.5f * MM, 29 * MM, 22 * MM); // titolo + nome
+        cover(c, 98.5f * MM, 116.5f * MM, 33 * MM, 4.5f * MM); // vecchio tratteggio del master
         cover(c, 127.2f * MM, 152.5f * MM, 8.3f * MM, 7 * MM); // cuori, senza toccare la n
         cover(c, 113.5f * MM, 84 * MM, 11 * MM, 7 * MM); // numero tavolo
         cover(c, 104 * MM, 59.5f * MM, 24 * MM, 7 * MM); // nome tavolo
@@ -150,16 +151,33 @@ public class VerticalInviteGeneratorService {
 
         String[] nameLines = sharedSurnameLabel == null
                 ? splitGuestName(displayName(guest.getNome()))
-                : new String[]{sharedSurnameLabel};
-        if (nameLines.length == 1) {
+                : new String[0];
+        if (sharedSurnameLabel != null) {
+            String title = sharedSurnameLabel.startsWith("Monsieur et Madame ")
+                    ? "Monsieur et Madame"
+                    : "M et Mme";
+            String surname = sharedSurnameLabel.substring(title.length()).trim();
+            float titleSize = title.equals("M et Mme") ? 8.2f : 5.2f;
+            float lineStart = title.equals("M et Mme") ? 114.5f * MM : 117.5f * MM;
+            text(c, title, PDType1Font.TIMES_BOLD, titleSize,
+                    100.5f * MM, 129 * MM, CREAM);
+            dotted(c, lineStart, 129.5f * MM, 128.2f * MM);
+            centeredFit(c, surname, PDType1Font.TIMES_BOLD,
+                    10.5f, 6.5f, 14.5f * MM, 122 * MM, 129 * MM, CREAM);
+        } else if (nameLines.length == 1) {
             centeredFit(c, nameLines[0], PDType1Font.TIMES_BOLD,
                     13, 6.5f, 28 * MM, ticketCx,
-                    sharedSurnameLabel == null ? 129 * MM : 133 * MM, CREAM);
+                    129 * MM, CREAM);
         } else {
             centeredFit(c, nameLines[0], PDType1Font.TIMES_BOLD,
                     13, 7, 27 * MM, ticketCx, 132 * MM, CREAM);
             centeredFit(c, nameLines[1], PDType1Font.TIMES_BOLD,
                     13, 7, 27 * MM, ticketCx, 125.5f * MM, CREAM);
+        }
+
+        if (sharedSurnameLabel == null) {
+            float guestUnderlineY = nameLines.length == 1 ? 125.2f * MM : 121.5f * MM;
+            dotted(c, 101 * MM, 129 * MM, guestUnderlineY);
         }
 
         if (couple) {
@@ -476,6 +494,16 @@ public class VerticalInviteGeneratorService {
         c.beginText();
         c.setFont(font, size);
         c.newLineAtOffset(cx - font.getStringWidth(text) / 1000 * size / 2, y);
+        c.showText(text);
+        c.endText();
+    }
+
+    private void text(PDPageContentStream c, String text, PDFont font,
+                      float size, float x, float y, Color color) throws IOException {
+        fill(c, color);
+        c.beginText();
+        c.setFont(font, size);
+        c.newLineAtOffset(x, y);
         c.showText(text);
         c.endText();
     }

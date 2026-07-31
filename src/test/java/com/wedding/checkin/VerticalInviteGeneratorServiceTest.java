@@ -6,7 +6,6 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VerticalInviteGeneratorServiceTest {
@@ -15,16 +14,29 @@ class VerticalInviteGeneratorServiceTest {
             new VerticalInviteGeneratorService();
 
     @Test
-    void coppiaConCognomeCondivisoMostraTitoloECognomeSeparati() throws Exception {
+    void coppiaConCognomeCondivisoMostraTitoloECognome() throws Exception {
         Guest guest = new Guest("0001", "M. et Mme. Matarella", "2", "Pazienza");
 
         byte[] pdf = generator.generate(guest);
 
         try (PDDocument document = PDDocument.load(pdf)) {
             String text = new PDFTextStripper().getText(document);
-            assertTrue(text.contains("M. et Mme"));
+            assertTrue(text.contains("M et Mme"));
             assertTrue(text.contains("Matarella"));
-            assertFalse(text.contains("Mme. Matarella"));
+        }
+    }
+
+    @Test
+    void supportaLaFormaEstesaMonsieurEtMadame() throws Exception {
+        Guest guest = new Guest("0002", "Monsieur et Madame Matarella", "2", "Pazienza");
+
+        byte[] pdf = generator.generate(guest);
+
+        try (PDDocument document = PDDocument.load(pdf)) {
+            String text = new PDFTextStripper().getText(document);
+            assertTrue(text.contains("Monsieur"));
+            assertTrue(text.contains("Madame"));
+            assertTrue(text.contains("Matarella"));
         }
     }
 }
