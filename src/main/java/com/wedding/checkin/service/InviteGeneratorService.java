@@ -296,16 +296,27 @@ public class InviteGeneratorService {
         }
     }
 
+    // Caricata una sola volta per istanza del servizio (bean singleton),
+    // non ad ogni generate(): evita di riaprire/ridecodificare il PNG da
+    // classpath per ognuno dei 400 inviti.
+    private final BufferedImage floralBorderImage = loadFloralBorderImage();
+
+    private static BufferedImage loadFloralBorderImage() {
+        try (InputStream source = InviteGeneratorService.class
+                .getResourceAsStream("/invite/floral-border.png")) {
+            return source == null ? null : ImageIO.read(source);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
     private void drawFloralBorder(PDDocument document, PDPageContentStream c) throws IOException {
-        try (InputStream source = getClass().getResourceAsStream("/invite/floral-border.png")) {
-            if (source != null) {
-                BufferedImage flowers = ImageIO.read(source);
-                PDImageXObject image = LosslessFactory.createFromImage(document, flowers);
-                float height = PAGE_H - 2 * MARGIN;
-                float width = height * flowers.getWidth() / flowers.getHeight();
-                c.drawImage(image, MARGIN, MARGIN, width, height);
-                return;
-            }
+        if (floralBorderImage != null) {
+            PDImageXObject image = LosslessFactory.createFromImage(document, floralBorderImage);
+            float height = PAGE_H - 2 * MARGIN;
+            float width = height * floralBorderImage.getWidth() / floralBorderImage.getHeight();
+            c.drawImage(image, MARGIN, MARGIN, width, height);
+            return;
         }
         drawVectorFloralBorder(c);
     }

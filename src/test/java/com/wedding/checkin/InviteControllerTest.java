@@ -4,6 +4,7 @@ import com.wedding.checkin.model.Guest;
 import com.wedding.checkin.repository.GuestRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.apache.pdfbox.pdmodel.PDDocument;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -62,6 +63,30 @@ class InviteControllerTest {
                     assertTrue(body.length > 5_000);
                     assertEquals("%PDF", new String(body, 0, 4));
                 });
+    }
+
+    @Test
+    void templateVerticaleRestituiscePdfNelFormatoCorretto() throws Exception {
+        byte[] body = mockMvc.perform(get("/api/invites/0001.pdf")
+                        .queryParam("template", "vertical")
+                        .header("X-Staff-Pin", PIN))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                .andReturn().getResponse().getContentAsByteArray();
+
+        try (PDDocument document = PDDocument.load(body)) {
+            var box = document.getPage(0).getMediaBox();
+            assertEquals(140, box.getWidth() * 25.4 / 72, 0.1);
+            assertEquals(200, box.getHeight() * 25.4 / 72, 0.1);
+        }
+    }
+
+    @Test
+    void templateSconosciutoRestituisce400() throws Exception {
+        mockMvc.perform(get("/api/invites/0001.pdf")
+                        .queryParam("template", "sconosciuto")
+                        .header("X-Staff-Pin", PIN))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

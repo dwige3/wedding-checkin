@@ -3,6 +3,7 @@ package com.wedding.checkin.controller;
 import com.wedding.checkin.model.Guest;
 import com.wedding.checkin.repository.GuestRepository;
 import com.wedding.checkin.service.InviteGeneratorService;
+import com.wedding.checkin.service.VerticalInviteGeneratorService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -30,34 +32,40 @@ public class InviteController {
 
     private final GuestRepository repo;
     private final InviteGeneratorService generator;
+    private final VerticalInviteGeneratorService verticalGenerator;
     private final String staffPin;
 
     public InviteController(GuestRepository repo, InviteGeneratorService generator,
+                            VerticalInviteGeneratorService verticalGenerator,
                             @Value("${staff.pin}") String staffPin) {
         this.repo = repo;
         this.generator = generator;
+        this.verticalGenerator = verticalGenerator;
         this.staffPin = staffPin;
     }
 
     @GetMapping(value = "/{id}.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> one(@PathVariable String id,
+                                      @RequestParam(defaultValue = "classic") String template,
                                       @RequestHeader(value = "X-Staff-Pin", required = false) String pin) {
         checkPin(pin);
         Guest guest = repo.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invitato non trovato"));
-        return download(generator.generate(guest), filename(guest), MediaType.APPLICATION_PDF);
+        return download(generate(guest, template), filename(guest), MediaType.APPLICATION_PDF);
     }
 
     @GetMapping(value = "/all.zip", produces = "application/zip")
     public ResponseEntity<byte[]> all(
+            @RequestParam(defaultValue = "classic") String template,
             @RequestHeader(value = "X-Staff-Pin", required = false) String pin) {
         checkPin(pin);
+        validateTemplate(template);
         List<Guest> guests = repo.findAll();
         try (ByteArrayOutputStream bytes = new ByteArrayOutputStream();
              ZipOutputStream zip = new ZipOutputStream(bytes, StandardCharsets.UTF_8)) {
             for (Guest guest : guests) {
                 zip.putNextEntry(new ZipEntry(filename(guest)));
-                zip.write(generator.generate(guest));
+                zip.write(generate(guest, template));
                 zip.closeEntry();
             }
             zip.finish();
@@ -72,6 +80,19 @@ public class InviteController {
     private void checkPin(String pin) {
         if (pin == null || !pin.equals(staffPin)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "PIN staff mancante o errato");
+        }
+    }
+
+    private byte[] generate(Guest guest, String template) {
+        validateTemplate(template);
+        return "vertical".equals(template)
+                ? verticalGenerator.generate(guest)
+                : generator.generate(guest);
+    }
+
+    private void validateTemplate(String template) {
+        if (!"classic".equals(template) && !"vertical".equals(template)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Template invito non valido");
         }
     }
 

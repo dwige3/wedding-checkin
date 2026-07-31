@@ -115,6 +115,11 @@
            style="width:100%; padding:8px; border:1px solid var(--gold); border-radius:4px; margin-bottom:8px; font-family:inherit;">
     <textarea id="csvInput" placeholder="0001,Mario Rossi et Daniela Telemaco,2,Pazienza
 0002,Anna Bianchi,3,Fiducia"></textarea>
+    <label for="inviteTemplate">Stile degli inviti</label>
+    <select id="inviteTemplate">
+      <option value="classic">Floreale orizzontale</option>
+      <option value="vertical">Elegante verticale</option>
+    </select>
     <div>
       <button class="action" id="importBtn">Importa lista</button>
       <button class="action" id="downloadInvitesBtn">Scarica inviti (.zip)</button>
@@ -182,17 +187,19 @@
   document.getElementById('downloadInvitesBtn').addEventListener('click', async () => {
     const msg = document.getElementById('importMsg');
     const button = document.getElementById('downloadInvitesBtn');
+    const template = document.getElementById('inviteTemplate').value;
     button.disabled = true;
     button.textContent = 'Generazione...';
     msg.textContent = 'Generazione degli inviti in corso. Per liste grandi può richiedere qualche secondo...';
     try {
-      const resp = await fetch('/api/invites/all.zip', { headers: staffPinHeader() });
+      const resp = await fetch('/api/invites/all.zip?template=' + encodeURIComponent(template),
+        { headers: staffPinHeader() });
       if (resp.status === 403) { msg.textContent = 'PIN staff errato o mancante.'; return; }
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const url = URL.createObjectURL(await resp.blob());
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'inviti.zip';
+      link.download = template === 'vertical' ? 'inviti_verticali.zip' : 'inviti.zip';
       document.body.appendChild(link);
       link.click();
       link.remove();
