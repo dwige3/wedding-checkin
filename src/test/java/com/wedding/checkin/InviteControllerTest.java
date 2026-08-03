@@ -57,7 +57,7 @@ class InviteControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_PDF))
                 .andExpect(header().string("Content-Disposition",
-                        containsString("invito_0001_mario_rossi.pdf")))
+                        containsString("mario_rossi.pdf")))
                 .andExpect(result -> {
                     byte[] body = result.getResponse().getContentAsByteArray();
                     assertTrue(body.length > 5_000);
@@ -113,8 +113,8 @@ class InviteControllerTest {
             }
         }
         assertEquals(Set.of(
-                "invito_0001_mario_rossi.pdf",
-                "invito_0002_anna_bianchi.pdf"), entries);
+                "mario_rossi.pdf",
+                "anna_bianchi.pdf"), entries);
     }
 
     @Test

@@ -1,5 +1,11 @@
 package com.wedding.checkin.service;
 
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.EncodeHintType;
+import com.google.zxing.client.j2se.MatrixToImageConfig;
+import com.google.zxing.client.j2se.MatrixToImageWriter;
+import com.google.zxing.qrcode.QRCodeWriter;
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 import com.wedding.checkin.model.Guest;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -124,7 +130,7 @@ public class VerticalInviteGeneratorService {
                 }
                 PDImageXObject master = LosslessFactory.createFromImage(document, masterImage);
                 c.drawImage(master, 0, 0, PAGE_W, PAGE_H);
-                drawDynamicMasterFields(c, guest);
+                drawDynamicMasterFields(document, c, guest);
             }
             document.save(output);
             return output.toByteArray();
@@ -133,14 +139,31 @@ public class VerticalInviteGeneratorService {
         }
     }
 
-    private void drawDynamicMasterFields(PDPageContentStream c, Guest guest) throws IOException {
+    private void drawDynamicMasterFields(PDDocument document, PDPageContentStream c, Guest guest)
+            throws IOException {
         // Le aree sono campionate dal verde uniforme del master. Tutto il
         // resto dell'immagine rimane esattamente quello fornito dall'utente.
-        cover(c, 97 * MM, 121.5f * MM, 36 * MM, 22 * MM); // titolo + nome
-        cover(c, 98.5f * MM, 116.5f * MM, 33 * MM, 4.5f * MM); // vecchio tratteggio del master
+        cover(c, 97 * MM, 111.2f * MM, 36 * MM, 32.3f * MM); // QR, titolo, nome e tratteggio
         cover(c, 127.2f * MM, 152.5f * MM, 8.3f * MM, 7 * MM); // cuori, senza toccare la n
         cover(c, 113.5f * MM, 84 * MM, 11 * MM, 7 * MM); // numero tavolo
         cover(c, 104 * MM, 59.5f * MM, 24 * MM, 7 * MM); // nome tavolo
+        cover(c, 26 * MM, 52.8f * MM, 42 * MM, 5.8f * MM); // vecchia dicitura, senza toccare la riga sopra
+
+        centered(c, "Total Bonanjo Douala", PDType1Font.TIMES_ROMAN,
+                8, 47 * MM, 54.9f * MM, CREAM);
+
+        float qrSize = 16 * MM;
+        float qrPad = 1.4f * MM;
+        float qrBoxSize = qrSize + 2 * qrPad;
+        float qrBoxX = 115 * MM - qrBoxSize / 2;
+        float qrBoxY = 124.5f * MM;
+        fill(c, Color.WHITE);
+        stroke(c, GOLD);
+        c.setLineWidth(.8f);
+        roundedRect(c, qrBoxX, qrBoxY, qrBoxSize, qrBoxSize,
+                1.6f * MM, true, true);
+        PDImageXObject qr = LosslessFactory.createFromImage(document, qrImage(guest.getId()));
+        c.drawImage(qr, qrBoxX + qrPad, qrBoxY + qrPad, qrSize, qrSize);
 
         float ticketCx = 115 * MM;
         boolean couple = isCouple(guest.getNome());
@@ -148,7 +171,7 @@ public class VerticalInviteGeneratorService {
         boolean inlineGuest = sharedSurnameLabel != null || !couple;
         if (!inlineGuest) {
             centered(c, invitationTitle(guest.getNome()), PDType1Font.TIMES_BOLD,
-                    9, ticketCx, 139.2f * MM, CREAM);
+                    8, ticketCx, 121.2f * MM, CREAM);
         }
 
         String[] nameLines = inlineGuest
@@ -172,25 +195,36 @@ public class VerticalInviteGeneratorService {
             float titleWidth = PDType1Font.TIMES_BOLD.getStringWidth(title) / 1000 * titleSize;
             float lineStart = titleX + titleWidth + 1.2f * MM;
             float nameWidth = lineEnd - lineStart;
-            text(c, title, PDType1Font.TIMES_BOLD, titleSize,
-                    titleX, 129 * MM, CREAM);
-            dotted(c, lineStart, lineEnd, 128.2f * MM);
-            centeredFit(c, guestName.toUpperCase(Locale.ROOT), PDType1Font.TIMES_BOLD,
-                    12.5f, 8.5f, nameWidth,
-                    lineStart + nameWidth / 2, 129 * MM, CREAM);
+            String upperGuestName = guestName.toUpperCase(Locale.ROOT);
+            boolean requiresTwoLines = PDType1Font.TIMES_BOLD.getStringWidth(upperGuestName)
+                    / 1000 * 8.5f > nameWidth;
+            if (requiresTwoLines) {
+                centered(c, title, PDType1Font.TIMES_BOLD,
+                        Math.min(titleSize, 8.5f), ticketCx, 121 * MM, CREAM);
+                centeredFit(c, upperGuestName, PDType1Font.TIMES_BOLD,
+                        11.5f, 7, 34 * MM, ticketCx, 116.4f * MM, CREAM);
+                dotted(c, 98 * MM, 132 * MM, 115.4f * MM);
+            } else {
+                text(c, title, PDType1Font.TIMES_BOLD, titleSize,
+                        titleX, 116.7f * MM, CREAM);
+                dotted(c, lineStart, lineEnd, 115.9f * MM);
+                centeredFit(c, upperGuestName, PDType1Font.TIMES_BOLD,
+                        12.5f, 8.5f, nameWidth,
+                        lineStart + nameWidth / 2, 116.7f * MM, CREAM);
+            }
         } else if (nameLines.length == 1) {
             centeredFit(c, nameLines[0].toUpperCase(Locale.ROOT), PDType1Font.TIMES_BOLD,
                     13, 6.5f, 28 * MM, ticketCx,
-                    129 * MM, CREAM);
+                    116.5f * MM, CREAM);
         } else {
             centeredFit(c, nameLines[0].toUpperCase(Locale.ROOT), PDType1Font.TIMES_BOLD,
-                    13, 7, 27 * MM, ticketCx, 132 * MM, CREAM);
+                    10.5f, 7, 27 * MM, ticketCx, 117.5f * MM, CREAM);
             centeredFit(c, nameLines[1].toUpperCase(Locale.ROOT), PDType1Font.TIMES_BOLD,
-                    13, 7, 27 * MM, ticketCx, 125.5f * MM, CREAM);
+                    10.5f, 7, 27 * MM, ticketCx, 113.5f * MM, CREAM);
         }
 
         if (!inlineGuest) {
-            float guestUnderlineY = nameLines.length == 1 ? 125.2f * MM : 121.5f * MM;
+            float guestUnderlineY = nameLines.length == 1 ? 113.8f * MM : 111.7f * MM;
             dotted(c, 101 * MM, 129 * MM, guestUnderlineY);
         }
 
@@ -212,6 +246,18 @@ public class VerticalInviteGeneratorService {
         fill(c, MASTER_GREEN);
         c.addRect(x, y, w, h);
         c.fill();
+    }
+
+    private BufferedImage qrImage(String payload) {
+        try {
+            var matrix = new QRCodeWriter().encode(payload, BarcodeFormat.QR_CODE, 500, 500,
+                    Map.of(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.M,
+                            EncodeHintType.MARGIN, 1));
+            return MatrixToImageWriter.toBufferedImage(matrix,
+                    new MatrixToImageConfig(MASTER_GREEN.getRGB(), Color.WHITE.getRGB()));
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Impossibile creare il QR per l'id " + payload, e);
+        }
     }
 
     private String[] splitGuestName(String name) {

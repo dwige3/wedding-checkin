@@ -22,7 +22,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -63,8 +65,14 @@ public class InviteController {
         List<Guest> guests = repo.findAll();
         try (ByteArrayOutputStream bytes = new ByteArrayOutputStream();
              ZipOutputStream zip = new ZipOutputStream(bytes, StandardCharsets.UTF_8)) {
+            Map<String, Integer> occurrences = new HashMap<>();
             for (Guest guest : guests) {
-                zip.putNextEntry(new ZipEntry(filename(guest)));
+                String baseFilename = filename(guest);
+                int occurrence = occurrences.merge(baseFilename, 1, Integer::sum);
+                String zipFilename = occurrence == 1
+                        ? baseFilename
+                        : baseFilename.replace(".pdf", "_" + occurrence + ".pdf");
+                zip.putNextEntry(new ZipEntry(zipFilename));
                 zip.write(generate(guest, template));
                 zip.closeEntry();
             }
@@ -109,6 +117,6 @@ public class InviteController {
                 .replaceAll("\\p{M}", "")
                 .replaceAll("[^a-z0-9]+", "_")
                 .replaceAll("^_+|_+$", "");
-        return "invito_" + guest.getId() + "_" + safeName + ".pdf";
+        return safeName + ".pdf";
     }
 }
