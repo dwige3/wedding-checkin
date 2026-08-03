@@ -22,7 +22,7 @@ class VerticalInviteGeneratorServiceTest {
         try (PDDocument document = PDDocument.load(pdf)) {
             String text = new PDFTextStripper().getText(document);
             assertTrue(text.contains("M et Mme"));
-            assertTrue(text.contains("Matarella"));
+            assertTrue(text.contains("MATARELLA"));
         }
     }
 
@@ -36,7 +36,20 @@ class VerticalInviteGeneratorServiceTest {
             String text = new PDFTextStripper().getText(document);
             assertTrue(text.contains("Monsieur"));
             assertTrue(text.contains("Madame"));
-            assertTrue(text.contains("Matarella"));
+            assertTrue(text.contains("MATARELLA"));
+        }
+    }
+
+    @Test
+    void singleMostraTitoloENomeSulloStessoCampo() throws Exception {
+        Guest guest = new Guest("0003", "Mme Anna Bianchi", "7", "Armonia");
+
+        byte[] pdf = generator.generate(guest);
+
+        try (PDDocument document = PDDocument.load(pdf)) {
+            String text = new PDFTextStripper().getText(document);
+            assertTrue(text.contains("Mme"));
+            assertTrue(text.contains("ANNA BIANCHI"));
         }
     }
 }

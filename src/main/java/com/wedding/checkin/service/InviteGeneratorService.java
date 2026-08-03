@@ -193,7 +193,7 @@ public class InviteGeneratorService {
                 6, cx, 35.7f * MM, GOLD);
         centered(c, "AU CLUB PAD", PDType1Font.HELVETICA,
                 9, cx, 32.3f * MM, CREAM);
-        centered(c, "total bonanjo douala", PDType1Font.TIMES_ROMAN,
+        centered(c, "Total Bonanjo Douala", PDType1Font.TIMES_ROMAN,
                 7, cx, 29.3f * MM, CREAM);
         flourish(c, cx, 26.7f * MM, 17 * MM);
         centered(c, "SUIVI DE LA SOIRÉE AU MÊME ENDROIT", PDType1Font.HELVETICA,
