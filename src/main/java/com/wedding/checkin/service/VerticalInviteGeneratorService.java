@@ -152,6 +152,16 @@ public class VerticalInviteGeneratorService {
         centered(c, "Total Bonanjo Douala", PDType1Font.TIMES_ROMAN,
                 8, 47 * MM, 54.9f * MM, CREAM);
 
+        if (usesGillNgounou(guest)) {
+            cover(c, 20 * MM, 109.3f * MM, 56 * MM, 17 * MM);
+            PDFont scriptFont = scriptFontBytes == null
+                    ? PDType1Font.TIMES_ITALIC
+                    : PDType0Font.load(document,
+                        new ByteArrayInputStream(scriptFontBytes), true);
+            centeredFit(c, "Gill    Ngounou", scriptFont,
+                    25, 16, 55 * MM, 48 * MM, 117.5f * MM, CREAM);
+        }
+
         float qrSize = 16 * MM;
         float qrPad = 1.4f * MM;
         float qrBoxSize = qrSize + 2 * qrPad;
@@ -258,6 +268,11 @@ public class VerticalInviteGeneratorService {
         } catch (Exception e) {
             throw new IllegalArgumentException("Impossibile creare il QR per l'id " + payload, e);
         }
+    }
+
+    private boolean usesGillNgounou(Guest guest) {
+        String tableName = resolveTableName(guest).trim().toLowerCase(Locale.ROOT);
+        return "resilieza".equals(tableName) || "resilienza".equals(tableName);
     }
 
     private String[] splitGuestName(String name) {

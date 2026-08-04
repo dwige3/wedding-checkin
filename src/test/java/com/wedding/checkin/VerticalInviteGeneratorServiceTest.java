@@ -76,4 +76,17 @@ class VerticalInviteGeneratorServiceTest {
             assertEquals("0099", new MultiFormatReader().decode(bitmap).getText());
         }
     }
+
+    @Test
+    void tavoloResiliezaUsaGillNgounou() throws Exception {
+        Guest guest = new Guest("0100", "Mme Anna Bianchi", "20", "Resilieza");
+
+        byte[] pdf = generator.generate(guest);
+
+        try (PDDocument document = PDDocument.load(pdf)) {
+            String text = new PDFTextStripper().getText(document);
+            assertTrue(text.replaceAll("\\s+", " ").contains("Gill Ngounou"));
+            assertTrue(text.contains("Resilieza"));
+        }
+    }
 }
