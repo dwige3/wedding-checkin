@@ -79,14 +79,107 @@ public class VerticalInviteGeneratorService {
 
     private static BufferedImage loadMasterImage() {
         try (InputStream source = VerticalInviteGeneratorService.class
-                .getResourceAsStream("/invite/vertical-master.png")) {
+                .getResourceAsStream("/invite/vertical-master.png");
+             InputStream photoSource = VerticalInviteGeneratorService.class
+                .getResourceAsStream("/invite/couple-photo-background.png")) {
             if (source == null) {
                 return null;
             }
-            return scaleToDpi(ImageIO.read(source), 140f, 200f, IMAGE_DPI);
+            BufferedImage master = ImageIO.read(source);
+            if (photoSource != null) {
+                master = addCouplePhoto(master, ImageIO.read(photoSource));
+            }
+            return scaleToDpi(master, 140f, 200f, IMAGE_DPI);
         } catch (IOException e) {
             return null;
         }
+    }
+
+    /** Inserisce la foto solo nel fondo verde del pannello sinistro. Il testo,
+     * i fiori, le borchie e i bordi originali restano quindi intatti. */
+    private static BufferedImage addCouplePhoto(BufferedImage master, BufferedImage photo) {
+        BufferedImage result = new BufferedImage(master.getWidth(), master.getHeight(),
+                BufferedImage.TYPE_INT_ARGB);
+        Graphics2D copy = result.createGraphics();
+        copy.drawImage(master, 0, 0, null);
+        copy.dispose();
+
+        int panelX = mmToImageX(5, master.getWidth());
+        int panelRight = mmToImageX(90, master.getWidth());
+        int panelTop = mmToImageY(188, master.getHeight());
+        int panelBottom = mmToImageY(8, master.getHeight());
+        int panelWidth = panelRight - panelX;
+        int panelHeight = panelBottom - panelTop;
+
+        BufferedImage fitted = new BufferedImage(master.getWidth(), master.getHeight(),
+                BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = fitted.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        double targetRatio = panelWidth / (double) panelHeight;
+        int cropWidth = Math.min(photo.getWidth(),
+                (int) Math.round(photo.getHeight() * targetRatio));
+        int cropHeight = Math.min(photo.getHeight(),
+                (int) Math.round(photo.getWidth() / targetRatio));
+        int cropX = (photo.getWidth() - cropWidth) / 2;
+        int cropY = Math.max(0, (photo.getHeight() - cropHeight) / 3);
+        g.drawImage(photo, panelX, panelTop, panelRight, panelBottom,
+                cropX, cropY, cropX + cropWidth, cropY + cropHeight, null);
+        g.dispose();
+
+        // La velatura mantiene riconoscibile la foto ma evita che gli abiti
+        // bianchi competano con il testo avorio dell'invito.
+        for (int y = panelTop; y < panelBottom; y++) {
+            for (int x = panelX; x < panelRight; x++) {
+                Color pixel = new Color(fitted.getRGB(x, y), true);
+                int red = Math.round(pixel.getRed() * .62f
+                        + MASTER_GREEN.getRed() * .38f);
+                int green = Math.round(pixel.getGreen() * .62f
+                        + MASTER_GREEN.getGreen() * .38f);
+                int blue = Math.round(pixel.getBlue() * .62f
+                        + MASTER_GREEN.getBlue() * .38f);
+                fitted.setRGB(x, y, new Color(red, green, blue, pixel.getAlpha()).getRGB());
+            }
+        }
+
+        for (int y = panelTop; y < panelBottom; y++) {
+            for (int x = panelX; x < panelRight; x++) {
+                Color base = new Color(master.getRGB(x, y), true);
+                int dr = base.getRed() - MASTER_GREEN.getRed();
+                int dg = base.getGreen() - MASTER_GREEN.getGreen();
+                int db = base.getBlue() - MASTER_GREEN.getBlue();
+                if (dr * dr + dg * dg + db * db < 2300
+                        && base.getRed() < 45 && base.getGreen() < 75
+                        && base.getBlue() < 60) {
+                    result.setRGB(x, y, fitted.getRGB(x, y));
+                }
+            }
+        }
+
+        // Questi due testi sono personalizzati in PDF: si elimina la versione
+        // impressa nel master usando lo stesso fondo fotografico, senza rettangoli.
+        replaceWithPhoto(result, fitted, 20, 109.3f, 56, 17);
+        replaceWithPhoto(result, fitted, 26, 52.8f, 42, 5.8f);
+        return result;
+    }
+
+    private static void replaceWithPhoto(BufferedImage target, BufferedImage photo,
+                                         float xMm, float yMm, float wMm, float hMm) {
+        int x1 = mmToImageX(xMm, target.getWidth());
+        int x2 = mmToImageX(xMm + wMm, target.getWidth());
+        int y1 = mmToImageY(yMm + hMm, target.getHeight());
+        int y2 = mmToImageY(yMm, target.getHeight());
+        Graphics2D g = target.createGraphics();
+        g.drawImage(photo, x1, y1, x2, y2, x1, y1, x2, y2, null);
+        g.dispose();
+    }
+
+    private static int mmToImageX(float mm, int width) {
+        return Math.max(0, Math.min(width, Math.round(mm / 140f * width)));
+    }
+
+    private static int mmToImageY(float pdfYmm, int height) {
+        return Math.max(0, Math.min(height, Math.round((200f - pdfYmm) / 200f * height)));
     }
 
     private static byte[] loadScriptFontBytes() {
@@ -147,20 +240,16 @@ public class VerticalInviteGeneratorService {
         cover(c, 127.2f * MM, 152.5f * MM, 8.3f * MM, 7 * MM); // cuori, senza toccare la n
         cover(c, 113.5f * MM, 84 * MM, 11 * MM, 7 * MM); // numero tavolo
         cover(c, 104 * MM, 59.5f * MM, 24 * MM, 7 * MM); // nome tavolo
-        cover(c, 26 * MM, 52.8f * MM, 42 * MM, 5.8f * MM); // vecchia dicitura, senza toccare la riga sopra
-
         centered(c, "Total Bonanjo Douala", PDType1Font.TIMES_ROMAN,
                 8, 47 * MM, 54.9f * MM, CREAM);
 
-        if (usesGillNgounou(guest)) {
-            cover(c, 20 * MM, 109.3f * MM, 56 * MM, 17 * MM);
-            PDFont scriptFont = scriptFontBytes == null
-                    ? PDType1Font.TIMES_ITALIC
-                    : PDType0Font.load(document,
-                        new ByteArrayInputStream(scriptFontBytes), true);
-            centeredFit(c, "Gill    Ngounou", scriptFont,
-                    25, 16, 55 * MM, 48 * MM, 117.5f * MM, CREAM);
-        }
+        PDFont scriptFont = scriptFontBytes == null
+                ? PDType1Font.TIMES_ITALIC
+                : PDType0Font.load(document,
+                    new ByteArrayInputStream(scriptFontBytes), true);
+        String groomName = usesGillNgounou(guest) ? "Gill    Ngounou" : "Gill Tchiengue";
+        centeredFit(c, groomName, scriptFont,
+                25, 16, 55 * MM, 48 * MM, 117.5f * MM, CREAM);
 
         float qrSize = 16 * MM;
         float qrPad = 1.4f * MM;
